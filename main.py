@@ -29,6 +29,8 @@ from ingest import scheduler
 from api.routes import router
 from api.auth_routes import router as auth_router
 from api.admin_routes import router as admin_router
+from api.taxii_routes import router as taxii_router
+from api.remediation_routes import router as rem_router
 
 console = Console()
 
@@ -103,6 +105,8 @@ app.add_middleware(
 app.include_router(router, prefix="/api/v1", tags=["Threat Feed"])
 app.include_router(auth_router, prefix="/auth", tags=["Auth"])
 app.include_router(admin_router, prefix="/api/v1/admin", tags=["Admin"])
+app.include_router(taxii_router, prefix="/api/v1", tags=["TAXII"])
+app.include_router(rem_router, prefix="/api/v1", tags=["Remediation"])
 
 
 @app.api_route("/api/ollama/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
