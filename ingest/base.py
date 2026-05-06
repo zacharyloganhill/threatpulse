@@ -125,6 +125,13 @@ class BaseFetcher(ABC):
                         await db.update_risk_score(item_id, rs)
                 except Exception:
                     pass
+                # Fire webhooks for new items
+                try:
+                    from reports.webhook_dispatcher import get_dispatcher
+                    dispatcher = get_dispatcher()
+                    await dispatcher.dispatch(item)
+                except Exception:
+                    pass
                 # Auto-enrich IOCs for malware/threat items
                 if item.get("category") in ("malware", "threat"):
                     try:
