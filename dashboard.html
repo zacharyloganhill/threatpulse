@@ -410,6 +410,14 @@ function renderDetail(i){
     <button class="qbtn" onclick="qa('detect','${esc2(i.title)}','${esc2(tags.slice(0,3).join(','))}','')">↗ Generate Detection Rules</button>
     <button class="qbtn" onclick="qa('ioc','${esc2(i.title)}','${esc2(cves.join(','))}','')">↗ Get IOCs & Hunting Queries</button>
     <button class="qbtn" onclick="qa('impact','${esc2(i.title)}','${esc2(i.vendor||'')}','${esc2(i.product||'')}')">↗ Analyze Client Impact</button>
+  </div>
+  <div class="dsec">
+    <div class="dlabel">IOC Enrichment</div>
+    <div style="display:flex;gap:4px;margin-top:4px">
+      <input id="ioc-input" placeholder="IP / hash / domain / URL" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:9px;padding:5px 8px;outline:none" onkeydown="if(event.key==='Enter')lookupIOC()">
+      <button class="qbtn" style="margin:0;padding:5px 10px" onclick="lookupIOC()">LOOKUP</button>
+    </div>
+    <div id="ioc-result" style="margin-top:6px;font-size:9px"></div>
   </div>`;
 }
 
@@ -566,6 +574,25 @@ async function sendPrompt(text){
   }catch(err){
     document.getElementById('ai-body').innerHTML=`<div class="ai-resp" style="color:var(--red)">Error: ${e(String(err.message||err))}</div>`;
   }
+}
+
+async function lookupIOC(){
+  const val=(document.getElementById('ioc-input')||{value:''}).value.trim();
+  const el=document.getElementById('ioc-result');
+  if(!val||!el)return;
+  el.innerHTML='<span style="color:var(--muted)">Enriching...</span>';
+  try{
+    const r=await fetch(API+'/ioc/lookup?value='+encodeURIComponent(val));
+    if(!r.ok){el.innerHTML='<span style="color:var(--red)">'+e(await r.text())+'</span>';return;}
+    const d=await r.json();
+    const lines=[];
+    if(d.ioc_type)lines.push(`<b>Type:</b> ${e(d.ioc_type)}`);
+    if(d.abuseipdb_score!=null)lines.push(`<b>AbuseIPDB:</b> <span style="color:${d.abuseipdb_score>50?'var(--red)':'var(--green)'}">${d.abuseipdb_score}%</span> (${e(d.abuseipdb_country||'?')})`);
+    if(d.greynoise_classification)lines.push(`<b>GreyNoise:</b> <span style="color:${d.greynoise_classification==='malicious'?'var(--red)':'var(--green)'}">${e(d.greynoise_classification)}</span>${d.greynoise_name?' ('+e(d.greynoise_name)+')':''}`);
+    if(d.vt_malicious!=null)lines.push(`<b>VirusTotal:</b> <span style="color:${d.vt_malicious>0?'var(--red)':'var(--green)'}">${d.vt_malicious}/${d.vt_total||'?'}</span>${d.vt_name?' — '+e(d.vt_name):''}`);
+    if(!lines.length)lines.push('<span style="color:var(--muted)">No enrichment data available — add API keys to .env</span>');
+    el.innerHTML=lines.join('<br>');
+  }catch(err){el.innerHTML='<span style="color:var(--red)">'+e(String(err))+'</span>';}
 }
 
 (async()=>{showSkel();await Promise.all([loadStats(),load(),loadOllamaStatus()]);sched();})();

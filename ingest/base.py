@@ -125,6 +125,13 @@ class BaseFetcher(ABC):
                         await db.update_risk_score(item_id, rs)
                 except Exception:
                     pass
+                # Auto-enrich IOCs for malware/threat items
+                if item.get("category") in ("malware", "threat"):
+                    try:
+                        from ingest.ioc_enricher import auto_enrich_item
+                        await auto_enrich_item({**item, "id": item_id})
+                    except Exception:
+                        pass
                 # Asset matching
                 if new_ids and all_assets:
                     try:
