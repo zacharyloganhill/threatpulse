@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PhantomFeed — Upload Center</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080a0d;--bg2:#0c0f14;--bg3:#111620;--bg4:#161c28;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#c9d4e3;--muted:#4e5d72;--dim:#1e2836;
+  --teal:#00d4aa;--teal-d:rgba(0,212,170,0.08);--teal-m:rgba(0,212,170,0.15);
+  --red:#f0595a;--red-d:rgba(240,89,90,0.1);
+  --amber:#e8a530;--amber-d:rgba(232,165,48,0.1);
+  --blue:#4d9de0;--blue-d:rgba(77,157,224,0.1);
+  --purple:#9b8ef5;--green:#3dd68c;--pink:#e878a6;
+  --mono:'JetBrains Mono',monospace;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:12px}
+::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#1e2836;border-radius:2px}
+
+/* Layout */
+.shell{display:grid;grid-template-rows:44px 1fr 28px;height:100vh;overflow:hidden}
+.topbar{display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--bg2);border-bottom:1px solid var(--border)}
+.logo-pulse{width:6px;height:6px;border-radius:50%;background:var(--teal);animation:pulse 2.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+.logo-text{font-size:11px;font-weight:700;letter-spacing:3px;color:var(--teal)}
+.page-title{font-size:9px;letter-spacing:2px;color:var(--muted);border-left:1px solid var(--border);padding-left:14px}
+.topnav{display:flex;gap:4px;margin-left:auto}
+.tnav{font-family:var(--mono);font-size:8px;letter-spacing:1px;padding:4px 10px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center}
+.tnav:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-d)}
+.tnav.active{border-color:var(--teal);color:var(--teal);background:var(--teal-m)}
+.statusbar{background:var(--bg2);border-top:1px solid var(--border);display:flex;align-items:center;padding:0 12px;gap:16px;font-size:8px;color:var(--muted);letter-spacing:.5px}
+.sb-dot{width:4px;height:4px;border-radius:50%;background:var(--green)}
+
+/* Main content */
+.content{overflow-y:auto;padding:20px;background:var(--bg)}
+
+/* Tabs */
+.tab-bar{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:24px}
+.tab{font-family:var(--mono);font-size:9px;letter-spacing:1.5px;padding:8px 16px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;transition:all .15s;text-transform:uppercase;background:none;border-top:none;border-left:none;border-right:none}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--teal);border-bottom-color:var(--teal)}
+.tab-pane{display:none}
+.tab-pane.active{display:block}
+
+/* Buttons */
+.btn{font-family:var(--mono);font-size:9px;letter-spacing:1px;padding:6px 14px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:all .15s}
+.btn:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-d)}
+.btn.primary{border-color:var(--teal);color:var(--teal);background:var(--teal-d)}
+.btn.primary:hover{background:var(--teal-m)}
+.btn.danger{border-color:var(--red);color:var(--red);background:var(--red-d)}
+.btn.sm{padding:4px 10px;font-size:8px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* Section headers */
+.section-header{font-size:10px;letter-spacing:2px;color:var(--teal);text-transform:uppercase;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.section-header::after{content:'';flex:1;height:1px;background:var(--border)}
+.sub-header{font-size:8px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:12px;margin-top:20px}
+
+/* Client selector */
+.client-row{display:flex;align-items:center;gap:10px;margin-bottom:20px;padding:10px 14px;background:var(--bg3);border:1px solid var(--border)}
+.client-row label{font-size:9px;letter-spacing:1px;color:var(--muted);white-space:nowrap}
+.sel{font-family:var(--mono);font-size:10px;background:var(--bg4);border:1px solid var(--border);color:var(--text);padding:5px 8px;outline:none;flex:1;cursor:pointer}
+.sel:focus{border-color:var(--teal)}
+.sel option{background:var(--bg3)}
+
+/* Wizard steps */
+.wizard{display:flex;gap:0;margin-bottom:24px}
+.wstep{display:flex;align-items:center;gap:0;flex:1}
+.wstep-inner{display:flex;align-items:center;gap:8px;flex:1;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-right:none;font-size:9px;color:var(--muted);letter-spacing:.5px}
+.wstep:last-child .wstep-inner{border-right:1px solid var(--border)}
+.wstep.done .wstep-inner{background:var(--teal-d);border-color:rgba(0,212,170,.3);color:var(--teal)}
+.wstep.active .wstep-inner{background:var(--bg4);border-color:var(--teal);color:var(--text)}
+.wnum{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;border:1px solid var(--border);color:var(--muted);flex-shrink:0}
+.wstep.done .wnum{background:var(--teal);border-color:var(--teal);color:#000}
+.wstep.active .wnum{border-color:var(--teal);color:var(--teal)}
+
+/* Upload cards grid */
+.cards-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+.upload-card{background:var(--bg3);border:1px solid var(--border);padding:16px;transition:border-color .15s}
+.upload-card:hover{border-color:var(--border2)}
+.card-title{font-size:10px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.card-desc{font-size:9px;color:var(--muted);margin-bottom:12px;line-height:1.6}
+.format-pills{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px}
+.pill{font-size:7px;letter-spacing:.5px;padding:2px 6px;border:1px solid var(--border);color:var(--muted)}
+
+/* Drop zone */
+.dropzone{border:1px dashed var(--border2);padding:20px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
+.dropzone:hover,.dropzone.drag-over{border-color:var(--teal);background:var(--teal-d)}
+.dz-icon{font-size:20px;margin-bottom:6px;opacity:.5}
+.dz-text{font-size:9px;color:var(--muted);line-height:1.6}
+.dz-text span{color:var(--teal);cursor:pointer}
+.dz-input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.progress-bar{height:2px;background:var(--bg4);margin-top:10px;display:none}
+.progress-fill{height:100%;background:var(--teal);width:0;transition:width .3s}
+
+/* Preview table */
+.preview-section{background:var(--bg3);border:1px solid var(--border);margin-top:20px;display:none}
+.preview-section.show{display:block}
+.preview-header{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.preview-title{font-size:9px;letter-spacing:1px;color:var(--text)}
+.preview-stats{display:flex;gap:12px}
+.pstat{font-size:8px;color:var(--muted)}
+.pstat span{color:var(--teal)}
+.table-wrap{overflow-x:auto;max-height:220px;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:9px}
+th{padding:7px 10px;background:var(--bg4);color:var(--muted);font-weight:500;letter-spacing:.5px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0}
+td{padding:6px 10px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+tr:hover td{background:rgba(255,255,255,.02)}
+
+/* Field mapping */
+.mapping-section{background:var(--bg3);border:1px solid var(--border);margin-top:12px;display:none;padding:14px}
+.mapping-section.show{display:block}
+.mapping-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
+.map-row{display:flex;flex-direction:column;gap:3px}
+.map-label{font-size:8px;color:var(--muted);letter-spacing:.5px}
+.map-sel{font-family:var(--mono);font-size:9px;background:var(--bg4);border:1px solid var(--border);color:var(--text);padding:4px 6px;width:100%;outline:none}
+.map-sel:focus{border-color:var(--teal)}
+
+/* Confirm row */
+.confirm-row{padding:14px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;justify-content:flex-end}
+
+/* Export rows */
+.export-section{margin-bottom:28px}
+.export-row{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg3);border:1px solid var(--border);border-top:none;transition:background .15s}
+.export-row:first-of-type{border-top:1px solid var(--border)}
+.export-row:hover{background:var(--bg4)}
+.export-icon{font-size:16px;width:24px;text-align:center;flex-shrink:0}
+.export-info{flex:1}
+.export-title{font-size:10px;color:var(--text);margin-bottom:2px}
+.export-desc{font-size:8px;color:var(--muted)}
+.export-opts{display:flex;gap:6px;align-items:center}
+.range-sel{font-family:var(--mono);font-size:8px;background:var(--bg4);border:1px solid var(--border);color:var(--text);padding:3px 6px;outline:none;cursor:pointer}
+.range-sel:focus{border-color:var(--teal)}
+
+/* IOC Lookup */
+.ioc-input-wrap{position:relative;margin-bottom:12px}
+.ioc-input{width:100%;font-family:var(--mono);font-size:12px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:12px 14px;outline:none;transition:border-color .15s}
+.ioc-input:focus{border-color:var(--teal)}
+.ioc-result{background:var(--bg3);border:1px solid var(--border);margin-top:12px;display:none}
+.ioc-result.show{display:block}
+.ioc-result-header{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+.ioc-val{font-size:12px;font-weight:700;color:var(--text)}
+.badge{font-size:7px;letter-spacing:1px;padding:2px 7px;border:1px solid}
+.badge.ip{border-color:rgba(77,157,224,.4);color:var(--blue)}
+.badge.domain{border-color:rgba(155,142,245,.4);color:var(--purple)}
+.badge.hash{border-color:rgba(232,165,48,.4);color:var(--amber)}
+.badge.url{border-color:rgba(232,165,48,.4);color:var(--amber)}
+.badge.malicious{border-color:rgba(240,89,90,.4);color:var(--red);background:var(--red-d)}
+.badge.clean{border-color:rgba(61,214,140,.4);color:var(--green);background:rgba(61,214,140,.08)}
+.badge.unknown{border-color:var(--border);color:var(--muted)}
+.source-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border-top:1px solid var(--border)}
+.source-box{background:var(--bg3);padding:12px 14px}
+.source-name{font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:6px;text-transform:uppercase}
+.source-val{font-size:14px;font-weight:700}
+.source-val.red{color:var(--red)}
+.source-val.green{color:var(--green)}
+.source-val.amber{color:var(--amber)}
+.source-val.muted{color:var(--muted)}
+.source-sub{font-size:8px;color:var(--muted);margin-top:2px}
+.ioc-actions{padding:12px 14px;display:flex;gap:8px;border-top:1px solid var(--border)}
+
+/* Bulk IOC */
+.bulk-section{margin-top:24px;padding-top:20px;border-top:1px solid var(--border)}
+
+/* History table */
+.history-table{width:100%;border-collapse:collapse;font-size:9px}
+.history-table th{padding:7px 10px;background:var(--bg4);color:var(--muted);font-weight:500;letter-spacing:.5px;text-align:left;border-bottom:1px solid var(--border)}
+.history-table td{padding:7px 10px;border-bottom:1px solid var(--border);color:var(--text)}
+.history-table tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
+.status-badge{font-size:7px;letter-spacing:.5px;padding:2px 6px;border:1px solid}
+.status-badge.imported{border-color:rgba(61,214,140,.4);color:var(--green)}
+.status-badge.partial{border-color:rgba(232,165,48,.4);color:var(--amber)}
+.status-badge.failed{border-color:rgba(240,89,90,.4);color:var(--red)}
+.status-badge.pending,.status-badge.preview{border-color:var(--border);color:var(--muted)}
+.status-badge.enriched{border-color:rgba(77,157,224,.4);color:var(--blue)}
+.filter-row{display:flex;gap:8px;margin-bottom:16px;align-items:center}
+
+/* Expanded row */
+.expand-row{display:none;background:var(--bg4)}
+.expand-row.show{display:table-row}
+.expand-row td{padding:12px 14px;color:var(--muted);font-size:9px;border-bottom:1px solid var(--border)}
+.expand-inner{display:flex;gap:16px;align-items:center}
+
+/* Toast */
+.toast-container{position:fixed;bottom:40px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:9999}
+.toast{padding:10px 16px;background:var(--bg3);border:1px solid var(--border);font-size:9px;letter-spacing:.5px;color:var(--text);display:flex;align-items:center;gap:10px;min-width:250px;animation:slideIn .2s ease;box-shadow:0 4px 24px rgba(0,0,0,.6)}
+@keyframes slideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+.toast.success{border-color:rgba(61,214,140,.4);background:rgba(61,214,140,.06)}
+.toast.error{border-color:rgba(240,89,90,.4);background:rgba(240,89,90,.06)}
+.toast.info{border-color:rgba(77,157,224,.4);background:rgba(77,157,224,.06)}
+.toast-icon{font-size:12px}
+.toast-close{margin-left:auto;cursor:pointer;opacity:.5}
+.toast-close:hover{opacity:1}
+
+/* GitHub push form */
+.gh-form{background:var(--bg3);border:1px solid var(--border);padding:16px;margin-top:12px;display:none}
+.gh-form.show{display:block}
+.input-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.finput{font-family:var(--mono);font-size:9px;background:var(--bg4);border:1px solid var(--border);color:var(--text);padding:6px 8px;outline:none;width:100%}
+.finput:focus{border-color:var(--teal)}
+.finput::placeholder{color:var(--muted)}
+.input-label{font-size:8px;color:var(--muted);margin-bottom:3px;display:block}
+
+/* Loading spinner */
+.spinner{display:inline-block;width:10px;height:10px;border:1px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- Topbar -->
+<div class="topbar">
+  <div class="logo-pulse"></div>
+  <div class="logo-text">PHANTOMFEED</div>
+  <div class="page-title">UPLOAD CENTER</div>
+  <nav class="topnav">
+    <a class="tnav" href="dashboard.html">DASHBOARD</a>
+    <a class="tnav" href="analytics.html">ANALYTICS</a>
+    <a class="tnav active" href="upload.html">UPLOAD</a>
+  </nav>
+</div>
+
+<!-- Main Content -->
+<div class="content">
+
+  <!-- Tab bar -->
+  <div class="tab-bar">
+    <button class="tab active" onclick="switchTab('upload')">Upload Center</button>
+    <button class="tab" onclick="switchTab('export')">Export &amp; Reports</button>
+    <button class="tab" onclick="switchTab('ioc')">IOC Lookup</button>
+    <button class="tab" onclick="switchTab('history')">Import History</button>
+  </div>
+
+  <!-- ================================================================ UPLOAD TAB -->
+  <div id="tab-upload" class="tab-pane active">
+
+    <!-- Wizard steps -->
+    <div class="wizard">
+      <div class="wstep active" id="wstep-1">
+        <div class="wstep-inner"><div class="wnum">1</div>Select File</div>
+      </div>
+      <div class="wstep" id="wstep-2">
+        <div class="wstep-inner"><div class="wnum">2</div>Preview Data</div>
+      </div>
+      <div class="wstep" id="wstep-3">
+        <div class="wstep-inner"><div class="wnum">3</div>Map Fields</div>
+      </div>
+      <div class="wstep" id="wstep-4">
+        <div class="wstep-inner"><div class="wnum">4</div>Confirm Import</div>
+      </div>
+    </div>
+
+    <!-- Client selector -->
+    <div class="client-row">
+      <label>IMPORT FOR CLIENT:</label>
+      <select class="sel" id="client-sel">
+        <option value="">— Global (no client) —</option>
+      </select>
+      <button class="btn sm" onclick="loadClients()">↻</button>
+    </div>
+
+    <!-- Upload cards -->
+    <div class="section-header">Upload Files</div>
+    <div class="cards-grid">
+
+      <!-- Scan Results -->
+      <div class="upload-card" id="card-scan">
+        <div class="card-title">🔍 Scan Results</div>
+        <div class="card-desc">Import vulnerability scan exports. Auto-detects format and extracts assets + findings.</div>
+        <div class="format-pills">
+          <span class="pill">.nessus</span>
+          <span class="pill">Qualys XML</span>
+          <span class="pill">Qualys CSV</span>
+          <span class="pill">OpenVAS XML</span>
+          <span class="pill">Rapid7 CSV</span>
+        </div>
+        <div class="dropzone" id="dz-scan" ondragover="dzOver(event,'scan')" ondragleave="dzLeave('scan')" ondrop="dzDrop(event,'scan')">
+          <div class="dz-icon">📄</div>
+          <div class="dz-text">Drag & drop or <span onclick="document.getElementById('fi-scan').click()">browse</span></div>
+          <input type="file" id="fi-scan" class="dz-input" accept=".nessus,.xml,.csv" onchange="handleFile(this,'scan')">
+          <div class="progress-bar" id="pb-scan"><div class="progress-fill" id="pf-scan"></div></div>
+        </div>
+      </div>
+
+      <!-- Asset Inventory -->
+      <div class="upload-card" id="card-assets">
+        <div class="card-title">🖥️ Asset Inventory</div>
+        <div class="card-desc">Import your asset list. PhantomFeed fuzzy-maps column names automatically.</div>
+        <div class="format-pills">
+          <span class="pill">CSV</span>
+          <span class="pill">XLSX</span>
+        </div>
+        <div class="dropzone" id="dz-assets" ondragover="dzOver(event,'assets')" ondragleave="dzLeave('assets')" ondrop="dzDrop(event,'assets')">
+          <div class="dz-icon">📊</div>
+          <div class="dz-text">Drag & drop or <span onclick="document.getElementById('fi-assets').click()">browse</span></div>
+          <input type="file" id="fi-assets" class="dz-input" accept=".csv,.xlsx" onchange="handleFile(this,'assets')">
+          <div class="progress-bar" id="pb-assets"><div class="progress-fill" id="pf-assets"></div></div>
+        </div>
+      </div>
+
+      <!-- IOC Lists -->
+      <div class="upload-card" id="card-iocs">
+        <div class="card-title">🎯 IOC Lists</div>
+        <div class="card-desc">Import IP addresses, hashes, domains, URLs. Enrichment via AbuseIPDB, VirusTotal, GreyNoise triggered automatically.</div>
+        <div class="format-pills">
+          <span class="pill">TXT</span>
+          <span class="pill">CSV</span>
+          <span class="pill">JSON</span>
+          <span class="pill">STIX 2.1</span>
+        </div>
+        <div class="dropzone" id="dz-iocs" ondragover="dzOver(event,'iocs')" ondragleave="dzLeave('iocs')" ondrop="dzDrop(event,'iocs')">
+          <div class="dz-icon">🔒</div>
+          <div class="dz-text">Drag & drop or <span onclick="document.getElementById('fi-iocs').click()">browse</span></div>
+          <input type="file" id="fi-iocs" class="dz-input" accept=".txt,.csv,.json" onchange="handleFile(this,'iocs')">
+          <div class="progress-bar" id="pb-iocs"><div class="progress-fill" id="pf-iocs"></div></div>
+        </div>
+      </div>
+
+      <!-- Bulk Client Import -->
+      <div class="upload-card" id="card-clients">
+        <div class="card-title">🏢 Bulk Client Import</div>
+        <div class="card-desc">Import multiple clients at once. Columns: name, industry, contact_email, min_severity, vendors, products.</div>
+        <div class="format-pills">
+          <span class="pill">CSV</span>
+          <a class="pill" style="color:var(--teal);cursor:pointer" onclick="downloadTemplate('clients')">⬇ template</a>
+        </div>
+        <div class="dropzone" id="dz-clients" ondragover="dzOver(event,'clients')" ondragleave="dzLeave('clients')" ondrop="dzDrop(event,'clients')">
+          <div class="dz-icon">👥</div>
+          <div class="dz-text">Drag & drop or <span onclick="document.getElementById('fi-clients').click()">browse</span></div>
+          <input type="file" id="fi-clients" class="dz-input" accept=".csv" onchange="handleFile(this,'clients')">
+          <div class="progress-bar" id="pb-clients"><div class="progress-fill" id="pf-clients"></div></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Preview section (shown after upload) -->
+    <div class="preview-section" id="preview-section">
+      <div class="preview-header">
+        <div class="preview-title">PREVIEW — <span id="preview-format">AUTO-DETECTED</span></div>
+        <div class="preview-stats">
+          <div class="pstat">Assets: <span id="ps-assets">0</span></div>
+          <div class="pstat">Findings: <span id="ps-findings">0</span></div>
+          <div class="pstat">IOCs: <span id="ps-iocs">0</span></div>
+        </div>
+      </div>
+      <div class="table-wrap" id="preview-table-wrap">
+        <table id="preview-table">
+          <thead id="preview-thead"></thead>
+          <tbody id="preview-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Field mapping -->
+    <div class="mapping-section" id="mapping-section">
+      <div class="sub-header">Field Mapping — drag columns to PhantomFeed fields</div>
+      <div class="mapping-grid" id="mapping-grid"></div>
+    </div>
+
+    <!-- Confirm row -->
+    <div class="confirm-row" id="confirm-row" style="display:none">
+      <button class="btn" onclick="cancelUpload()">✕ Cancel</button>
+      <button class="btn primary" id="confirm-btn" onclick="confirmUpload()">✓ Confirm Import</button>
+    </div>
+
+  </div><!-- /tab-upload -->
+
+  <!-- ================================================================ EXPORT TAB -->
+  <div id="tab-export" class="tab-pane">
+
+    <!-- Client Reports -->
+    <div class="export-section">
+      <div class="section-header">Client Reports</div>
+
+      <div class="export-row">
+        <div class="export-icon">📋</div>
+        <div class="export-info">
+          <div class="export-title">PDF Threat Report</div>
+          <div class="export-desc">Full threat intelligence report with charts, compliance mapping, and remediation checklist</div>
+        </div>
+        <div class="export-opts">
+          <select class="range-sel" id="rpt-client">
+            <option value="">All clients</option>
+          </select>
+          <select class="range-sel" id="rpt-days">
+            <option value="7">7 days</option>
+            <option value="30" selected>30 days</option>
+            <option value="90">90 days</option>
+          </select>
+          <button class="btn sm primary" onclick="downloadReport('pdf')">⬇ PDF</button>
+          <button class="btn sm" onclick="downloadReport('html')">👁 Preview</button>
+        </div>
+      </div>
+
+      <div class="export-row">
+        <div class="export-icon">📊</div>
+        <div class="export-info">
+          <div class="export-title">Compliance Report</div>
+          <div class="export-desc">CMMC / NIST 800-53 / CIS Controls compliance gap analysis</div>
+        </div>
+        <div class="export-opts">
+          <select class="range-sel" id="compliance-framework">
+            <option value="CMMC">CMMC 2.0</option>
+            <option value="NIST">NIST 800-53</option>
+            <option value="CIS">CIS Controls</option>
+          </select>
+          <button class="btn sm primary" onclick="downloadComplianceReport()">⬇ CSV</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Data Exports -->
+    <div class="export-section">
+      <div class="section-header">Data Exports</div>
+
+      <div class="export-row">
+        <div class="export-icon">📄</div>
+        <div class="export-info">
+          <div class="export-title">Threat Items — CSV</div>
+          <div class="export-desc">All feed items with severity, CVSS, risk score, compliance tags, CVE IDs</div>
+        </div>
+        <div class="export-opts">
+          <select class="range-sel" id="csv-sev">
+            <option value="">All severities</option>
+            <option value="CRITICAL">Critical only</option>
+            <option value="CRITICAL,HIGH">Critical + High</option>
+          </select>
+          <button class="btn sm primary" onclick="downloadItems('csv')">⬇ CSV</button>
+        </div>
+      </div>
+
+      <div class="export-row">
+        <div class="export-icon">{ }</div>
+        <div class="export-info">
+          <div class="export-title">Threat Items — JSON</div>
+          <div class="export-desc">Full item objects with all metadata fields</div>
+        </div>
+        <div class="export-opts">
+          <button class="btn sm primary" onclick="downloadItems('json')">⬇ JSON</button>
+        </div>
+      </div>
+
+      <div class="export-row">
+        <div class="export-icon">🗂️</div>
+        <div class="export-info">
+          <div class="export-title">Remediation Tracker</div>
+          <div class="export-desc">Open remediation items with SLA status, color-coded by urgency</div>
+        </div>
+        <div class="export-opts">
+          <select class="range-sel" id="rem-client-sel">
+            <option value="">— select client —</option>
+          </select>
+          <button class="btn sm" onclick="downloadRemediation('csv')">⬇ CSV</button>
+          <button class="btn sm primary" onclick="downloadRemediation('xlsx')">⬇ XLSX</button>
+        </div>
+      </div>
+
+      <div class="export-row">
+        <div class="export-icon">🎯</div>
+        <div class="export-info">
+          <div class="export-title">IOC List</div>
+          <div class="export-desc">Enriched indicators of compromise</div>
+        </div>
+        <div class="export-opts">
+          <select class="range-sel" id="ioc-days">
+            <option value="7" selected>7 days</option>
+            <option value="30">30 days</option>
+            <option value="90">90 days</option>
+          </select>
+          <select class="range-sel" id="ioc-fmt">
+            <option value="txt">TXT</option>
+            <option value="csv">CSV</option>
+            <option value="stix">STIX 2.1</option>
+          </select>
+          <button class="btn sm primary" onclick="downloadIOCs()">⬇ Download</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Detection Rules -->
+    <div class="export-section">
+      <div class="section-header">Detection Rules</div>
+
+      <div class="export-row">
+        <div class="export-icon">🛡️</div>
+        <div class="export-info">
+          <div class="export-title">Detection Rules Bundle</div>
+          <div class="export-desc">ZIP containing Splunk SPL, Microsoft Sentinel KQL, and Sigma YAML rules for top CRITICAL/HIGH items</div>
+        </div>
+        <div class="export-opts">
+          <select class="range-sel" id="rules-client">
+            <option value="">All (global)</option>
+          </select>
+          <button class="btn sm primary" onclick="downloadRules()">⬇ ZIP</button>
+        </div>
+      </div>
+
+      <div class="export-row">
+        <div class="export-icon">🐙</div>
+        <div class="export-info">
+          <div class="export-title">Push Rules to GitHub</div>
+          <div class="export-desc">Commit detection rules directly to your GitHub repository</div>
+        </div>
+        <div class="export-opts">
+          <button class="btn sm" onclick="toggleGHForm()">⚙ Configure</button>
+        </div>
+      </div>
+
+      <div class="gh-form" id="gh-form">
+        <div class="input-row">
+          <div>
+            <label class="input-label">Repository (owner/repo)</label>
+            <input type="text" class="finput" id="gh-repo" placeholder="org/detection-rules">
+          </div>
+          <div>
+            <label class="input-label">Branch</label>
+            <input type="text" class="finput" id="gh-branch" placeholder="main" value="main">
+          </div>
+        </div>
+        <div class="input-row">
+          <div>
+            <label class="input-label">GitHub Token (PAT)</label>
+            <input type="password" class="finput" id="gh-token" placeholder="ghp_...">
+          </div>
+          <div>
+            <label class="input-label">Path in repo</label>
+            <input type="text" class="finput" id="gh-path" placeholder="detection-rules" value="detection-rules">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+          <button class="btn sm" onclick="toggleGHForm()">Cancel</button>
+          <button class="btn sm primary" onclick="pushToGitHub()">Push Rules ↑</button>
+        </div>
+      </div>
+
+    </div>
+
+  </div><!-- /tab-export -->
+
+  <!-- ================================================================ IOC TAB -->
+  <div id="tab-ioc" class="tab-pane">
+
+    <div class="section-header">IOC Lookup</div>
+
+    <div class="ioc-input-wrap">
+      <input type="text" class="ioc-input" id="ioc-val" placeholder="Paste any IP address, MD5/SHA256 hash, domain, or URL..." onkeydown="if(event.key==='Enter')lookupIOC()">
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:20px">
+      <button class="btn primary" onclick="lookupIOC()">🔍 Look Up</button>
+      <button class="btn" onclick="document.getElementById('ioc-val').value='';document.getElementById('ioc-result').classList.remove('show')">✕ Clear</button>
+    </div>
+
+    <!-- Result card -->
+    <div class="ioc-result" id="ioc-result">
+      <div class="ioc-result-header">
+        <div class="ioc-val" id="ioc-display-val"></div>
+        <span class="badge" id="ioc-type-badge"></span>
+        <span class="badge" id="ioc-verdict-badge"></span>
+      </div>
+      <div class="source-grid">
+        <div class="source-box">
+          <div class="source-name">AbuseIPDB</div>
+          <div class="source-val" id="src-abuse">—</div>
+          <div class="source-sub" id="src-abuse-sub"></div>
+        </div>
+        <div class="source-box">
+          <div class="source-name">VirusTotal</div>
+          <div class="source-val" id="src-vt">—</div>
+          <div class="source-sub" id="src-vt-sub"></div>
+        </div>
+        <div class="source-box">
+          <div class="source-name">GreyNoise</div>
+          <div class="source-val" id="src-gn">—</div>
+          <div class="source-sub" id="src-gn-sub"></div>
+        </div>
+      </div>
+      <div class="ioc-actions">
+        <button class="btn sm" onclick="copyIOC()">⧉ Copy</button>
+        <button class="btn sm" onclick="exportIOCReport()">⬇ Export JSON</button>
+      </div>
+    </div>
+
+    <!-- Bulk lookup -->
+    <div class="bulk-section">
+      <div class="section-header">Bulk IOC Import</div>
+      <div class="card-desc" style="margin-bottom:12px;font-size:9px;color:var(--muted)">Upload a file with one IOC per line. Enrichment runs in the background.</div>
+      <div class="dropzone" id="dz-bulk-ioc" style="max-width:500px" ondragover="dzOver(event,'bulk-ioc')" ondragleave="dzLeave('bulk-ioc')" ondrop="dzDrop(event,'bulk-ioc')">
+        <div class="dz-icon">📂</div>
+        <div class="dz-text">Drag & drop IOC file or <span onclick="document.getElementById('fi-bulk-ioc').click()">browse</span></div>
+        <input type="file" id="fi-bulk-ioc" class="dz-input" accept=".txt,.csv,.json" onchange="handleFile(this,'iocs')">
+      </div>
+    </div>
+
+  </div><!-- /tab-ioc -->
+
+  <!-- ================================================================ HISTORY TAB -->
+  <div id="tab-history" class="tab-pane">
+
+    <div class="section-header">Import History</div>
+
+    <div class="filter-row">
+      <select class="sel" id="hist-client" style="flex:0 0 200px" onchange="loadHistory()">
+        <option value="">All clients</option>
+      </select>
+      <button class="btn sm" id="hf-all" onclick="histFilter('')">All</button>
+      <button class="btn sm" id="hf-imported" onclick="histFilter('imported')">Imported</button>
+      <button class="btn sm" id="hf-partial" onclick="histFilter('partial')">Partial</button>
+      <button class="btn sm" id="hf-failed" onclick="histFilter('failed')">Failed</button>
+      <button class="btn sm" style="margin-left:auto" onclick="loadHistory()">↻ Refresh</button>
+    </div>
+
+    <div style="overflow-x:auto">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>Filename</th>
+            <th>Client</th>
+            <th>Format</th>
+            <th>Imported</th>
+            <th>Status</th>
+            <th>Timestamp</th>
+          </tr>
+        </thead>
+        <tbody id="history-tbody"></tbody>
+      </table>
+    </div>
+  </div><!-- /tab-history -->
+
+</div><!-- /content -->
+
+<!-- Statusbar -->
+<div class="statusbar">
+  <div class="sb-dot" id="sb-dot" style="background:var(--muted)"></div>
+  <span id="sb-status">CONNECTING...</span>
+  <span style="margin-left:auto" id="sb-time"></span>
+</div>
+
+</div><!-- /shell -->
+
+<!-- Toast container -->
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+const API = 'http://localhost:8000/api/v1';
+let currentUploadId = null;
+let currentUploadType = null;
+let currentPreviewData = null;
+let histStatusFilter = '';
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['upload','export','ioc','history'][i] === name));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  if (name === 'history') loadHistory();
+  if (name === 'export') loadExportClients();
+}
+
+// ── Wizard helpers ────────────────────────────────────────────────────────────
+function setWizardStep(step) {
+  for (let i = 1; i <= 4; i++) {
+    const el = document.getElementById('wstep-'+i);
+    el.classList.toggle('done', i < step);
+    el.classList.toggle('active', i === step);
+  }
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function toast(msg, type='info', dur=3000) {
+  const icons = {success:'✓', error:'✕', info:'ℹ'};
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.innerHTML = `<span class="toast-icon">${icons[type]||'ℹ'}</span><span>${msg}</span><span class="toast-close" onclick="this.parentElement.remove()">✕</span>`;
+  document.getElementById('toast-container').appendChild(t);
+  if (dur) setTimeout(()=>t.remove(), dur);
+}
+
+// ── Status bar ────────────────────────────────────────────────────────────────
+async function checkStatus() {
+  try {
+    const r = await fetch(API+'/items?limit=1');
+    if (r.ok) {
+      document.getElementById('sb-dot').style.background='var(--green)';
+      document.getElementById('sb-status').textContent='● CONNECTED';
+    }
+  } catch {
+    document.getElementById('sb-dot').style.background='var(--red)';
+    document.getElementById('sb-status').textContent='○ OFFLINE';
+  }
+  document.getElementById('sb-time').textContent=new Date().toISOString().replace('T',' ').slice(0,19)+' UTC';
+}
+setInterval(checkStatus,30000); checkStatus();
+
+// ── Load clients ──────────────────────────────────────────────────────────────
+async function loadClients() {
+  try {
+    const r = await fetch(API+'/admin/clients', {headers:{'Authorization':'Bearer '+getToken()}});
+    if (!r.ok) return;
+    const clients = await r.json();
+    ['client-sel','hist-client'].forEach(id => {
+      const sel = document.getElementById(id);
+      const first = sel.options[0];
+      sel.innerHTML = '';
+      sel.appendChild(first.cloneNode(true));
+      clients.forEach(c => {
+        const o = document.createElement('option');
+        o.value = c.id; o.textContent = c.name;
+        sel.appendChild(o);
+      });
+    });
+  } catch(e) {}
+}
+
+async function loadExportClients() {
+  try {
+    const r = await fetch(API+'/admin/clients', {headers:{'Authorization':'Bearer '+getToken()}});
+    if (!r.ok) return;
+    const clients = await r.json();
+    ['rpt-client','rules-client','rem-client-sel'].forEach(id => {
+      const sel = document.getElementById(id);
+      const first = sel.options[0];
+      sel.innerHTML = '';
+      sel.appendChild(first.cloneNode(true));
+      clients.forEach(c => {
+        const o = document.createElement('option');
+        o.value = c.id; o.textContent = c.name;
+        sel.appendChild(o);
+      });
+    });
+  } catch(e) {}
+}
+
+function getToken() {
+  return localStorage.getItem('pf_token') || '';
+}
+
+// ── Drag & Drop ───────────────────────────────────────────────────────────────
+function dzOver(e, id) {
+  e.preventDefault();
+  document.getElementById('dz-'+id).classList.add('drag-over');
+}
+function dzLeave(id) {
+  document.getElementById('dz-'+id).classList.remove('drag-over');
+}
+function dzDrop(e, id) {
+  e.preventDefault();
+  dzLeave(id);
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  uploadFile(file, id);
+}
+function handleFile(input, type) {
+  const file = input.files[0];
+  if (!file) return;
+  uploadFile(file, type);
+}
+
+// ── File upload ───────────────────────────────────────────────────────────────
+async function uploadFile(file, type) {
+  currentUploadType = type;
+  const pb = document.getElementById('pb-'+type);
+  const pf = document.getElementById('pf-'+type);
+  if (pb) { pb.style.display='block'; pf.style.width='0'; }
+  setWizardStep(2);
+
+  const fd = new FormData();
+  fd.append('file', file);
+
+  const clientId = document.getElementById('client-sel').value;
+  const endpoints = {
+    scan: `${API}/upload/scan${clientId?'?client_id='+clientId:''}`,
+    assets: `${API}/upload/assets${clientId?'?client_id='+clientId:''}`,
+    iocs: `${API}/upload/iocs${clientId?'?client_id='+clientId:''}`,
+    clients: `${API}/upload/clients`,
+    'bulk-ioc': `${API}/upload/iocs`,
+  };
+
+  const url = endpoints[type] || `${API}/upload/scan`;
+
+  try {
+    if (pf) { pf.style.width='40%'; }
+    const r = await fetch(url, {method:'POST', body:fd});
+    if (pf) { pf.style.width='100%'; }
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || 'Upload failed');
+
+    currentUploadId = data.upload_id;
+    currentPreviewData = data;
+    renderPreview(data, type);
+    toast(`File uploaded: ${data.assets_found||0} assets, ${data.findings_found||data.iocs_found||0} findings/IOCs`, 'success');
+    if (pb) setTimeout(()=>{ pb.style.display='none'; }, 1000);
+  } catch(e) {
+    if (pb) pb.style.display='none';
+    toast('Upload error: '+e.message, 'error');
+    setWizardStep(1);
+  }
+}
+
+// ── Preview rendering ─────────────────────────────────────────────────────────
+function renderPreview(data, type) {
+  document.getElementById('preview-format').textContent = (data.detected_format || data.format || 'AUTO').toUpperCase();
+  document.getElementById('ps-assets').textContent = data.assets_found || 0;
+  document.getElementById('ps-findings').textContent = data.findings_found || 0;
+  document.getElementById('ps-iocs').textContent = data.iocs_found || 0;
+
+  const rows = data.preview_rows || data.preview || data.preview || [];
+  const iocs = data.preview || [];
+
+  let displayRows = rows;
+  if (type === 'iocs' && data.preview) displayRows = data.preview.slice(0,5);
+
+  const thead = document.getElementById('preview-thead');
+  const tbody = document.getElementById('preview-tbody');
+  thead.innerHTML = ''; tbody.innerHTML = '';
+
+  if (displayRows && displayRows.length) {
+    const cols = Object.keys(displayRows[0]);
+    const hr = document.createElement('tr');
+    cols.forEach(c => { const th=document.createElement('th'); th.textContent=c; hr.appendChild(th); });
+    thead.appendChild(hr);
+    displayRows.forEach(row => {
+      const tr = document.createElement('tr');
+      cols.forEach(c => { const td=document.createElement('td'); td.textContent=row[c]||''; tr.appendChild(td); });
+      tbody.appendChild(tr);
+    });
+  }
+
+  document.getElementById('preview-section').classList.add('show');
+  setWizardStep(3);
+  renderMapping(data);
+}
+
+function renderMapping(data) {
+  const mapping = data.field_mapping;
+  if (!mapping || Object.keys(mapping).length === 0) {
+    document.getElementById('mapping-section').classList.remove('show');
+    document.getElementById('confirm-row').style.display='flex';
+    setWizardStep(4);
+    return;
+  }
+
+  const grid = document.getElementById('mapping-grid');
+  grid.innerHTML = '';
+  const pfFields = ['hostname','ip_address','os','software','version','severity','cve_ids','title','solution'];
+  pfFields.forEach(field => {
+    const div = document.createElement('div');
+    div.className = 'map-row';
+    const label = document.createElement('div');
+    label.className = 'map-label';
+    label.textContent = field.replace('_',' ').toUpperCase();
+    const sel = document.createElement('select');
+    sel.className = 'map-sel';
+    sel.id = 'map-'+field;
+    sel.innerHTML = '<option value="">— not mapped —</option>';
+    const allCols = data.preview ? Object.keys(data.preview[0]||{}) : [];
+    allCols.forEach(col => {
+      const o = document.createElement('option');
+      o.value = col;
+      o.textContent = col;
+      o.selected = mapping[field] === col;
+      sel.appendChild(o);
+    });
+    div.appendChild(label);
+    div.appendChild(sel);
+    grid.appendChild(div);
+  });
+
+  document.getElementById('mapping-section').classList.add('show');
+  document.getElementById('confirm-row').style.display='flex';
+  setWizardStep(4);
+}
+
+// ── Confirm import ────────────────────────────────────────────────────────────
+async function confirmUpload() {
+  if (!currentUploadId) { toast('No pending upload', 'error'); return; }
+
+  const btn = document.getElementById('confirm-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Importing...';
+
+  const type = currentUploadType;
+  const endpoints = {
+    scan: `${API}/upload/scan/${currentUploadId}/confirm`,
+    assets: `${API}/upload/assets/${currentUploadId}/confirm`,
+    clients: `${API}/upload/clients/${currentUploadId}/confirm`,
+  };
+
+  // Gather mapping overrides
+  const fieldMapping = {};
+  const pfFields = ['hostname','ip_address','os','software','version','severity','cve_ids','title','solution'];
+  pfFields.forEach(f => {
+    const el = document.getElementById('map-'+f);
+    if (el && el.value) fieldMapping[f] = el.value;
+  });
+
+  const url = endpoints[type] || endpoints.scan;
+  try {
+    const r = await fetch(url, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({field_mapping: Object.keys(fieldMapping).length ? fieldMapping : undefined}),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || 'Import failed');
+
+    const count = data.imported_assets || data.imported_clients || data.imported || 0;
+    toast(`Import complete — ${count} records imported`, 'success');
+    cancelUpload();
+    loadHistory();
+  } catch(e) {
+    toast('Import error: '+e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '✓ Confirm Import';
+  }
+}
+
+function cancelUpload() {
+  currentUploadId = null;
+  currentPreviewData = null;
+  document.getElementById('preview-section').classList.remove('show');
+  document.getElementById('mapping-section').classList.remove('show');
+  document.getElementById('confirm-row').style.display='none';
+  setWizardStep(1);
+  ['scan','assets','iocs','clients'].forEach(t => {
+    const fi = document.getElementById('fi-'+t);
+    if (fi) fi.value = '';
+  });
+}
+
+// ── Templates ─────────────────────────────────────────────────────────────────
+function downloadTemplate(type) {
+  window.open(`${API}/upload/templates/${type}`, '_blank');
+}
+
+// ── Export helpers ────────────────────────────────────────────────────────────
+function downloadItems(fmt) {
+  const sev = document.getElementById('csv-sev').value;
+  let url = `${API}/export/items.${fmt}`;
+  if (sev) url += `?severity=${encodeURIComponent(sev)}`;
+  window.open(url, '_blank');
+}
+
+function downloadIOCs() {
+  const days = document.getElementById('ioc-days').value;
+  const fmt = document.getElementById('ioc-fmt').value;
+  window.open(`${API}/export/iocs.${fmt}?days=${days}`, '_blank');
+}
+
+function downloadRemediation(fmt) {
+  const clientId = document.getElementById('rem-client-sel').value;
+  if (!clientId) { toast('Please select a client', 'error'); return; }
+  window.open(`${API}/clients/${clientId}/export/remediation.${fmt}`, '_blank');
+}
+
+function downloadRules() {
+  const clientId = document.getElementById('rules-client').value;
+  const url = clientId ? `${API}/clients/${clientId}/export/detection-rules.zip` : `${API}/clients/global/export/detection-rules.zip`;
+  window.open(url, '_blank');
+}
+
+function downloadReport(fmt) {
+  const clientId = document.getElementById('rpt-client').value;
+  const days = document.getElementById('rpt-days').value;
+  if (!clientId) { toast('Please select a client', 'error'); return; }
+  if (fmt === 'pdf') {
+    window.open(`${API}/admin/clients/${clientId}/report.pdf?days=${days}`, '_blank');
+  } else {
+    window.open(`${API}/clients/${clientId}/report.html?days=${days}`, '_blank');
+  }
+}
+
+function downloadComplianceReport() {
+  const fw = document.getElementById('compliance-framework').value;
+  const clientId = document.getElementById('rpt-client').value;
+  let url = `${API}/export/items.csv?compliance=${fw}`;
+  if (clientId) url += `&client_id=${clientId}`;
+  window.open(url, '_blank');
+}
+
+function toggleGHForm() {
+  document.getElementById('gh-form').classList.toggle('show');
+}
+
+async function pushToGitHub() {
+  const clientId = document.getElementById('rules-client').value;
+  const body = {
+    repo: document.getElementById('gh-repo').value,
+    token: document.getElementById('gh-token').value,
+    branch: document.getElementById('gh-branch').value,
+    path: document.getElementById('gh-path').value,
+  };
+  if (!body.repo || !body.token) { toast('Repo and token required', 'error'); return; }
+  if (!clientId) { toast('Please select a client', 'error'); return; }
+  toast('Pushing to GitHub...', 'info', 0);
+  try {
+    const r = await fetch(`${API}/clients/${clientId}/export/push-rules-github`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    const data = await r.json();
+    document.querySelector('.toast').remove();
+    if (r.ok) toast(`Pushed ${data.pushed} files to GitHub`, 'success');
+    else throw new Error(data.detail||'Push failed');
+  } catch(e) {
+    document.querySelectorAll('.toast').forEach(t=>t.remove());
+    toast('GitHub push error: '+e.message, 'error');
+  }
+}
+
+// ── IOC Lookup ────────────────────────────────────────────────────────────────
+async function lookupIOC() {
+  const val = document.getElementById('ioc-val').value.trim();
+  if (!val) return;
+
+  document.getElementById('ioc-display-val').textContent = val;
+  document.getElementById('ioc-result').classList.add('show');
+  ['src-abuse','src-vt','src-gn'].forEach(id => document.getElementById(id).innerHTML='<span class="spinner"></span>');
+
+  try {
+    const r = await fetch(`${API}/ioc/lookup?value=${encodeURIComponent(val)}`);
+    const data = await r.json();
+
+    // Type badge
+    const tb = document.getElementById('ioc-type-badge');
+    tb.className = `badge ${data.ioc_type||'unknown'}`;
+    tb.textContent = (data.ioc_type||'unknown').toUpperCase();
+
+    // Verdict
+    const vb = document.getElementById('ioc-verdict-badge');
+    const score = data.abuseipdb_score || 0;
+    const vtMal = data.vt_malicious || 0;
+    const gnClass = data.greynoise_classification || '';
+    const isMalicious = score > 50 || vtMal > 5 || gnClass === 'malicious';
+    vb.className = `badge ${isMalicious?'malicious':'clean'}`;
+    vb.textContent = isMalicious ? 'MALICIOUS' : 'CLEAN';
+
+    // AbuseIPDB
+    const aEl = document.getElementById('src-abuse');
+    if (data.abuseipdb_score !== null && data.abuseipdb_score !== undefined) {
+      aEl.textContent = data.abuseipdb_score + '%';
+      aEl.className = 'source-val ' + (data.abuseipdb_score>50?'red':data.abuseipdb_score>20?'amber':'green');
+      document.getElementById('src-abuse-sub').textContent = data.abuseipdb_country||'';
+    } else {
+      aEl.textContent='N/A'; aEl.className='source-val muted';
+    }
+
+    // VirusTotal
+    const vtEl = document.getElementById('src-vt');
+    if (data.vt_malicious !== null && data.vt_malicious !== undefined) {
+      vtEl.textContent = `${data.vt_malicious}/${data.vt_total||'?'}`;
+      vtEl.className = 'source-val '+(data.vt_malicious>5?'red':data.vt_malicious>0?'amber':'green');
+      document.getElementById('src-vt-sub').textContent = data.vt_name||'';
+    } else {
+      vtEl.textContent='N/A'; vtEl.className='source-val muted';
+    }
+
+    // GreyNoise
+    const gnEl = document.getElementById('src-gn');
+    gnEl.textContent = gnClass || 'N/A';
+    gnEl.className = 'source-val '+(gnClass==='malicious'?'red':gnClass==='benign'?'green':'muted');
+    document.getElementById('src-gn-sub').textContent = data.greynoise_name||'';
+
+    window._lastIOCData = data;
+  } catch(e) {
+    toast('Lookup error: '+e.message, 'error');
+  }
+}
+
+function copyIOC() {
+  const val = document.getElementById('ioc-val').value.trim();
+  navigator.clipboard.writeText(val).then(()=>toast('Copied to clipboard','success'));
+}
+
+function exportIOCReport() {
+  const data = window._lastIOCData;
+  if (!data) { toast('No data to export','error'); return; }
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `ioc_report_${(document.getElementById('ioc-val').value||'unknown').replace(/[^a-z0-9]/gi,'_')}.json`;
+  a.click();
+}
+
+// ── Import History ────────────────────────────────────────────────────────────
+async function loadHistory() {
+  const clientId = document.getElementById('hist-client').value;
+  let url = `${API}/upload/history?limit=200`;
+  if (clientId) url += `&client_id=${clientId}`;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('Failed');
+    let rows = await r.json();
+    if (histStatusFilter) rows = rows.filter(r=>r.status===histStatusFilter);
+    renderHistory(rows);
+  } catch(e) {
+    toast('Could not load history: '+e.message,'error');
+  }
+}
+
+function histFilter(status) {
+  histStatusFilter = status;
+  ['all','imported','partial','failed'].forEach(s=>{
+    const btn = document.getElementById('hf-'+s);
+    if(btn) btn.classList.toggle('primary', s===status||(!status&&s==='all'));
+  });
+  loadHistory();
+}
+
+function renderHistory(rows) {
+  const tbody = document.getElementById('history-tbody');
+  tbody.innerHTML = '';
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">No upload history</td></tr>';
+    return;
+  }
+  rows.forEach(row => {
+    const tr = document.createElement('tr');
+    tr.onclick = () => toggleExpand(row.id);
+    const statusClass = row.status||'pending';
+    tr.innerHTML = `
+      <td>${row.filename||''}</td>
+      <td>${row.client_id||'Global'}</td>
+      <td>${row.file_type||''}</td>
+      <td>${row.records_imported||0} / ${row.records_total||0}</td>
+      <td><span class="status-badge ${statusClass}">${statusClass.toUpperCase()}</span></td>
+      <td>${(row.uploaded_at||'').slice(0,16).replace('T',' ')}</td>
+    `;
+    tbody.appendChild(tr);
+
+    const expand = document.createElement('tr');
+    expand.className = 'expand-row';
+    expand.id = 'expand-'+row.id;
+    expand.innerHTML = `<td colspan="6">
+      <div class="expand-inner">
+        <span>Skipped: ${row.records_skipped||0}</span>
+        ${row.error_message?`<span style="color:var(--red)">Error: ${row.error_message}</span>`:''}
+        ${row.completed_at?`<span>Completed: ${row.completed_at.slice(0,16).replace('T',' ')}</span>`:''}
+      </div>
+    </td>`;
+    tbody.appendChild(expand);
+  });
+}
+
+function toggleExpand(id) {
+  const el = document.getElementById('expand-'+id);
+  if (el) el.classList.toggle('show');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadClients();
+histFilter('');
+</script>
+</body>
+</html>
