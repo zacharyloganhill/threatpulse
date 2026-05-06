@@ -172,6 +172,19 @@ def start_scheduler():
         replace_existing=True,
     )
 
+    # Hourly temp file cleanup
+    async def _cleanup_temp():
+        from api.upload_routes import _cleanup_old_temp
+        await _cleanup_old_temp()
+
+    scheduler.add_job(
+        _cleanup_temp,
+        trigger=IntervalTrigger(hours=1),
+        id="temp_cleanup",
+        name="Upload Temp Cleanup",
+        replace_existing=True,
+    )
+
     scheduler.start()
     console.print(
         f"[green]✓ Scheduler started[/] — "

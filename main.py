@@ -33,6 +33,7 @@ from api.taxii_routes import router as taxii_router
 from api.remediation_routes import router as rem_router
 from api.analytics_routes import router as analytics_router
 from api.ioc_routes import router as ioc_router
+from api.upload_routes import router as upload_router
 
 console = Console()
 
@@ -111,6 +112,7 @@ app.include_router(taxii_router, prefix="/api/v1", tags=["TAXII"])
 app.include_router(rem_router, prefix="/api/v1", tags=["Remediation"])
 app.include_router(analytics_router, prefix="/api/v1", tags=["Analytics"])
 app.include_router(ioc_router, prefix="/api/v1", tags=["IOC"])
+app.include_router(upload_router, prefix="/api/v1", tags=["Upload"])
 
 
 @app.api_route("/api/ollama/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
