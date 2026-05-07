@@ -190,6 +190,7 @@ function renderClientPanel() {
       <button class="tab" onclick="cTab('export')">Export</button>
       <button class="tab" onclick="cTab('users')">Users</button>
       <button class="tab" onclick="cTab('scanners')">Scanners</button>
+      <button class="tab" onclick="cTab('siems')">SIEMs</button>
     </div>
 
     <div id="cpane-assets" class="tab-pane active"></div>
@@ -197,12 +198,13 @@ function renderClientPanel() {
     <div id="cpane-export" class="tab-pane"></div>
     <div id="cpane-users" class="tab-pane"></div>
     <div id="cpane-scanners" class="tab-pane"></div>
+    <div id="cpane-siems" class="tab-pane"></div>
   `;
   loadAssetsTab();
 }
 
 function cTab(name) {
-  const tabs = ['assets','history','export','users','scanners'];
+  const tabs = ['assets','history','export','users','scanners','siems'];
   document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active', tabs[i]===name));
   document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
   document.getElementById('cpane-'+name).classList.add('active');
@@ -211,6 +213,7 @@ function cTab(name) {
   else if (name==='export') renderExportTab();
   else if (name==='users') loadUsersTab();
   else if (name==='scanners') loadScannersTab();
+  else if (name==='siems') loadSIEMsTab();
 }
 
 // ── Assets tab ─────────────────────────────────────────────────────────────────
@@ -600,6 +603,129 @@ async function deleteScanner(scannerId) {
     method:'DELETE', headers:{Authorization:'Bearer '+getToken()}
   });
   if (r.ok) { toast('Scanner deleted','success'); loadScannersTab(); }
+  else toast('Delete failed','error');
+}
+
+// ── SIEMs tab ──────────────────────────────────────────────────────────────────
+const SIEM_TYPES = ['splunk','sentinel','qradar','elastic'];
+
+async function loadSIEMsTab() {
+  const el = document.getElementById('cpane-siems');
+  if (!el || !selectedClient) return;
+  el.innerHTML = '<span class="spinner"></span>';
+  try {
+    const r = await fetch(`${API}/clients/${selectedClient.id}/siems`, {headers:{Authorization:'Bearer '+getToken()}});
+    const data = r.ok ? await r.json() : {siems:[]};
+    const siems = data.siems || [];
+    el.innerHTML = `
+      <div class="section-header" style="display:flex;justify-content:space-between;align-items:center">
+        <span>SIEM Integrations</span>
+        <button class="btn sm primary" onclick="showAddSIEM()">+ Add SIEM</button>
+      </div>
+      ${siems.length ? `<table>
+        <thead><tr><th>Type</th><th>Label</th><th>Host</th><th>Interval</th><th>Status</th><th>Last Polled</th><th></th></tr></thead>
+        <tbody>${siems.map(s=>`
+          <tr>
+            <td><span style="font-family:var(--mono);font-size:9px;text-transform:uppercase;color:var(--teal)">${esc(s.siem_type)}</span></td>
+            <td>${esc(s.label)}</td>
+            <td style="font-size:9px;color:var(--muted)">${esc(s.host_url||'cloud')}</td>
+            <td>${s.poll_interval_hours}h</td>
+            <td style="font-size:9px;color:${(s.last_status||'').startsWith('ok')?'var(--green)':'var(--muted)'}">${esc((s.last_status||'never').slice(0,40))}</td>
+            <td style="font-size:9px;color:var(--muted)">${(s.last_polled||'Never').slice(0,16)}</td>
+            <td>
+              <button class="btn sm" onclick="triggerSIEMPoll('${s.id}')">Poll Now</button>
+              <button class="btn sm" onclick="deleteSIEM('${s.id}')" style="color:var(--red)">Del</button>
+            </td>
+          </tr>
+        `).join('')}</tbody>
+      </table>` : '<div class="empty">No SIEMs configured. Add Splunk, Sentinel, QRadar, or Elastic.</div>'}
+      <div id="siem-form" style="display:none;margin-top:16px;border:1px solid var(--border);padding:16px;border-radius:4px">
+        <div class="section-header">Add SIEM</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <label style="font-size:9px;color:var(--muted);display:block">Type
+            <select id="si-type" style="width:100%;margin-top:4px;background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:5px;font-family:var(--mono);font-size:9px">
+              ${SIEM_TYPES.map(t=>`<option value="${t}">${t}</option>`).join('')}
+            </select>
+          </label>
+          <label style="font-size:9px;color:var(--muted);display:block">Label
+            <input id="si-label" type="text" placeholder="Production Splunk" style="width:100%;margin-top:4px;background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:5px;font-family:var(--mono);font-size:9px">
+          </label>
+          <label style="font-size:9px;color:var(--muted);display:block">Host URL
+            <input id="si-host" type="text" placeholder="https://splunk:8089" style="width:100%;margin-top:4px;background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:5px;font-family:var(--mono);font-size:9px">
+          </label>
+          <label style="font-size:9px;color:var(--muted);display:block">Poll Interval (hours)
+            <input id="si-interval" type="number" value="6" min="1" max="168" style="width:100%;margin-top:4px;background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:5px;font-family:var(--mono);font-size:9px">
+          </label>
+          <label style="font-size:9px;color:var(--muted);display:block">API Key / Client ID
+            <input id="si-apikey" type="password" placeholder="encrypted at rest" style="width:100%;margin-top:4px;background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:5px;font-family:var(--mono);font-size:9px">
+          </label>
+          <label style="font-size:9px;color:var(--muted);display:block">Secret / Client Secret
+            <input id="si-secret" type="password" placeholder="encrypted at rest" style="width:100%;margin-top:4px;background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:5px;font-family:var(--mono);font-size:9px">
+          </label>
+          <label style="font-size:9px;color:var(--muted);display:block">Username (Splunk)
+            <input id="si-user" type="text" style="width:100%;margin-top:4px;background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:5px;font-family:var(--mono);font-size:9px">
+          </label>
+          <label style="font-size:9px;color:var(--muted);display:block">Password (Splunk)
+            <input id="si-pass" type="password" style="width:100%;margin-top:4px;background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:5px;font-family:var(--mono);font-size:9px">
+          </label>
+        </div>
+        <div id="si-extra-hint" style="margin-top:6px;font-size:9px;color:var(--muted)">
+          Sentinel: set extra_config {tenant_id, workspace_id}. QRadar: extra_config {min_severity}.
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px">
+          <button class="btn sm primary" onclick="submitAddSIEM()">Save SIEM</button>
+          <button class="btn sm" onclick="document.getElementById('siem-form').style.display='none'">Cancel</button>
+        </div>
+      </div>
+    `;
+  } catch(e) { el.innerHTML = '<div class="empty">Error loading SIEMs</div>'; }
+}
+
+function showAddSIEM() {
+  const f = document.getElementById('siem-form');
+  if (f) f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+
+async function submitAddSIEM() {
+  const body = {
+    siem_type: document.getElementById('si-type').value,
+    label: document.getElementById('si-label').value,
+    host_url: document.getElementById('si-host').value,
+    api_key: document.getElementById('si-apikey').value,
+    secret_key: document.getElementById('si-secret').value,
+    username: document.getElementById('si-user').value,
+    password: document.getElementById('si-pass').value,
+    poll_interval_hours: parseInt(document.getElementById('si-interval').value) || 6,
+  };
+  if (!body.label) { toast('Label required','error'); return; }
+  try {
+    const r = await fetch(`${API}/clients/${selectedClient.id}/siems`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+getToken()},
+      body: JSON.stringify(body),
+    });
+    if (r.ok) { toast('SIEM added','success'); loadSIEMsTab(); }
+    else { const d = await r.json(); throw new Error(d.detail||'Error'); }
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+async function triggerSIEMPoll(siemId) {
+  try {
+    const r = await fetch(`${API}/clients/${selectedClient.id}/siems/${siemId}/poll`, {
+      method:'POST', headers:{Authorization:'Bearer '+getToken()}
+    });
+    if (r.ok) toast('SIEM poll triggered','success');
+    else toast('Poll failed','error');
+    setTimeout(()=>loadSIEMsTab(), 3000);
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+async function deleteSIEM(siemId) {
+  if (!confirm('Delete this SIEM configuration?')) return;
+  const r = await fetch(`${API}/clients/${selectedClient.id}/siems/${siemId}`, {
+    method:'DELETE', headers:{Authorization:'Bearer '+getToken()}
+  });
+  if (r.ok) { toast('SIEM deleted','success'); loadSIEMsTab(); }
   else toast('Delete failed','error');
 }
 

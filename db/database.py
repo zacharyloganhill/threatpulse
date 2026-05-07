@@ -304,6 +304,27 @@ CREATE TABLE IF NOT EXISTS tabletop_exercises (
 );
 """
 
+CREATE_SIEM_CONFIGS = """
+CREATE TABLE IF NOT EXISTS siem_configs (
+    id                  TEXT PRIMARY KEY,
+    client_id           TEXT NOT NULL,
+    siem_type           TEXT NOT NULL,
+    label               TEXT NOT NULL,
+    host_url            TEXT,
+    api_key_enc         TEXT,
+    secret_key_enc      TEXT,
+    username_enc        TEXT,
+    password_enc        TEXT,
+    extra_config        TEXT DEFAULT '{}',
+    poll_interval_hours INTEGER DEFAULT 6,
+    is_active           INTEGER DEFAULT 1,
+    last_polled         TEXT,
+    last_status         TEXT DEFAULT 'never',
+    created_at          TEXT,
+    FOREIGN KEY (client_id) REFERENCES clients(id)
+);
+"""
+
 CREATE_SCANNER_CONFIGS = """
 CREATE TABLE IF NOT EXISTS scanner_configs (
     id                  TEXT PRIMARY KEY,
@@ -403,6 +424,7 @@ async def connect() -> aiosqlite.Connection:
     await _db.execute(CREATE_POSTURE_SCORES)
     await _db.execute(CREATE_CMMC_ASSESSMENTS)
     await _db.execute(CREATE_TABLETOP_EXERCISES)
+    await _db.execute(CREATE_SIEM_CONFIGS)
     await _db.execute(CREATE_SCANNER_CONFIGS)
     await _db.execute(CREATE_SCAN_FINDINGS)
     for idx in CREATE_INDEXES:
@@ -1730,3 +1752,83 @@ async def count_scan_findings_by_severity(client_id: str) -> dict:
     ) as cur:
         rows = await cur.fetchall()
     return {r["severity"]: r["cnt"] for r in rows}
+
+
+# ── SIEM Config CRUD ──────────────────────────────────────────────────────────
+
+async def create_siem_config(client_id: str, siem_type: str, label: str,
+                              host_url: str = "", api_key_enc: str = "",
+                              secret_key_enc: str = "", username_enc: str = "",
+                              password_enc: str = "", extra_config: dict = None,
+                              poll_interval_hours: int = 6) -> dict:
+    db = get_db()
+    sid = str(uuid.uuid4())
+    now = datetime.utcnow().isoformat()
+    await db.execute(
+        """INSERT INTO siem_configs
+           (id, client_id, siem_type, label, host_url, api_key_enc, secret_key_enc,
+            username_enc, password_enc, extra_config, poll_interval_hours, is_active,
+            last_status, created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,1,'never',?)""",
+        (sid, client_id, siem_type, label, host_url, api_key_enc, secret_key_enc,
+         username_enc, password_enc, json.dumps(extra_config or {}),
+         poll_interval_hours, now),
+    )
+    await db.commit()
+    return await get_siem_config(sid)
+
+
+async def get_siem_config(siem_id: str) -> Optional[dict]:
+    db = get_db()
+    async with db.execute("SELECT * FROM siem_configs WHERE id = ?", (siem_id,)) as cur:
+        row = await cur.fetchone()
+    return _siem_row(row) if row else None
+
+
+async def get_siem_configs(client_id: str) -> list[dict]:
+    db = get_db()
+    async with db.execute(
+        "SELECT * FROM siem_configs WHERE client_id = ? ORDER BY created_at", (client_id,)
+    ) as cur:
+        rows = await cur.fetchall()
+    return [_siem_row(r) for r in rows]
+
+
+async def get_all_active_siem_configs() -> list[dict]:
+    db = get_db()
+    async with db.execute("SELECT * FROM siem_configs WHERE is_active = 1") as cur:
+        rows = await cur.fetchall()
+    return [_siem_row(r) for r in rows]
+
+
+async def update_siem_config(siem_id: str, **fields) -> Optional[dict]:
+    db = get_db()
+    allowed = {"label", "host_url", "api_key_enc", "secret_key_enc", "username_enc",
+               "password_enc", "extra_config", "poll_interval_hours", "is_active",
+               "last_polled", "last_status"}
+    sets, params = [], []
+    for k, v in fields.items():
+        if k in allowed:
+            sets.append(f"{k} = ?")
+            params.append(json.dumps(v) if k == "extra_config" else v)
+    if not sets:
+        return await get_siem_config(siem_id)
+    params.append(siem_id)
+    await db.execute(f"UPDATE siem_configs SET {', '.join(sets)} WHERE id = ?", params)
+    await db.commit()
+    return await get_siem_config(siem_id)
+
+
+async def delete_siem_config(siem_id: str):
+    db = get_db()
+    await db.execute("DELETE FROM siem_configs WHERE id = ?", (siem_id,))
+    await db.commit()
+
+
+def _siem_row(row) -> dict:
+    d = dict(row)
+    try:
+        d["extra_config"] = json.loads(d.get("extra_config") or "{}")
+    except Exception:
+        d["extra_config"] = {}
+    return d

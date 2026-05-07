@@ -43,6 +43,7 @@ from api.cmmc_routes import router as cmmc_router
 from api.tabletop_routes import router as tabletop_router
 from api.supply_chain_routes import router as supply_chain_router
 from api.scanner_routes import router as scanner_router
+from api.siem_routes import router as siem_router
 
 console = Console()
 
@@ -137,6 +138,7 @@ app.include_router(cmmc_router, prefix="/api/v1", tags=["CMMC"])
 app.include_router(tabletop_router, prefix="/api/v1", tags=["Tabletop"])
 app.include_router(supply_chain_router, prefix="/api/v1", tags=["Supply Chain"])
 app.include_router(scanner_router, tags=["FedRAMP Scanners"])
+app.include_router(siem_router, tags=["FedRAMP SIEMs"])
 
 
 @app.api_route("/api/ollama/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
