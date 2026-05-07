@@ -100,7 +100,8 @@ async function doLogin(e) {
     localStorage.setItem('display_name', data.display_name || username);
     localStorage.setItem('client_id', data.client_id || '');
 
-    location.href = '/index.html';
+    const isClient = (data.role === 'client' || data.role === 'analyst') && data.client_id;
+    location.href = isClient ? '/client-portal.html' : '/index.html';
   } catch (ex) {
     err.textContent = ex.message || 'Login failed. Check credentials.';
     err.classList.add('show');
@@ -111,7 +112,10 @@ async function doLogin(e) {
 
 // Redirect if already logged in
 if (localStorage.getItem('token')) {
-  location.href = '/index.html';
+  const role = localStorage.getItem('role') || '';
+  const clientId = localStorage.getItem('client_id') || '';
+  const isClient = (role === 'client' || role === 'analyst') && clientId;
+  location.href = isClient ? '/client-portal.html' : '/index.html';
 }
 </script>
 </body>

@@ -16,7 +16,7 @@ from security.encryption import encrypt
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["siems"])
 
-SUPPORTED_TYPES = {"splunk", "sentinel", "qradar", "elastic"}
+SUPPORTED_TYPES = {"splunk", "sentinel", "qradar", "elastic", "chronicle"}
 
 
 class SIEMCreate(BaseModel):
@@ -29,6 +29,7 @@ class SIEMCreate(BaseModel):
     password: Optional[str] = ""
     extra_config: Optional[dict] = {}
     poll_interval_hours: Optional[int] = 6
+    pull_on_save: Optional[bool] = False
 
 
 class SIEMUpdate(BaseModel):
@@ -57,7 +58,9 @@ async def list_siems(client_id: str, user=Depends(get_current_user)):
 
 
 @router.post("/clients/{client_id}/siems", status_code=201)
-async def create_siem(client_id: str, body: SIEMCreate, user=Depends(get_current_user)):
+async def create_siem(client_id: str, body: SIEMCreate,
+                      background_tasks: BackgroundTasks,
+                      user=Depends(get_current_user)):
     if body.siem_type not in SUPPORTED_TYPES:
         raise HTTPException(400, f"Unsupported SIEM type. Must be one of: {SUPPORTED_TYPES}")
     client = await db.get_client(client_id)
@@ -75,6 +78,8 @@ async def create_siem(client_id: str, body: SIEMCreate, user=Depends(get_current
         extra_config=body.extra_config or {},
         poll_interval_hours=body.poll_interval_hours,
     )
+    if body.pull_on_save:
+        background_tasks.add_task(_run_siem, config)
     return _mask(config)
 
 
@@ -149,6 +154,9 @@ async def _run_siem(config: dict):
         elif siem_type == "elastic":
             from ingest.siems.elastic import ElasticFetcher
             fetcher = ElasticFetcher(config)
+        elif siem_type == "chronicle":
+            from ingest.siems.chronicle import ChronicleFetcher
+            fetcher = ChronicleFetcher(config)
         else:
             logger.warning("Unknown SIEM type: %s", siem_type)
             return

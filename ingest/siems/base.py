@@ -45,13 +45,16 @@ class BaseSIEMFetcher(ABC):
                 alert["client_id"] = self.client_id
                 alert["scanner_id"] = self.siem_id
                 alert["scanner_type"] = f"siem:{self.siem_type}"
-                import db.database as _db
-                if await _db.upsert_scan_finding(alert):
+                if await db.upsert_scan_finding(alert):
                     new_count += 1
             await db.update_siem_config(
                 self.siem_id,
                 last_polled=now,
                 last_status=f"ok:{len(alerts)} alerts ({new_count} new)",
+            )
+            await db.add_pull_record(
+                self.siem_id, "siem", self.client_id, "ok",
+                finding_count=len(alerts),
             )
             logger.info("%s SIEM %s: %d alerts, %d new",
                         self.siem_type, self.siem_id, len(alerts), new_count)
@@ -62,6 +65,10 @@ class BaseSIEMFetcher(ABC):
                 self.siem_id,
                 last_polled=now,
                 last_status=f"error:{exc}",
+            )
+            await db.add_pull_record(
+                self.siem_id, "siem", self.client_id, "error",
+                error_message=str(exc)[:500],
             )
             return 0
 

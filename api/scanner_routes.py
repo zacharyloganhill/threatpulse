@@ -16,7 +16,11 @@ from security.encryption import encrypt
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["scanners"])
 
-SUPPORTED_TYPES = {"tenable", "rapid7", "qualys", "crowdstrike"}
+SUPPORTED_TYPES = {"tenable", "rapid7", "qualys", "crowdstrike",
+                   "tenable_io", "tenable_sc", "nexpose"}
+
+# Wizard sub-types mapped to DB canonical types
+_TYPE_MAP = {"tenable_io": "tenable", "tenable_sc": "tenable", "nexpose": "rapid7"}
 
 
 class ScannerCreate(BaseModel):
@@ -29,6 +33,7 @@ class ScannerCreate(BaseModel):
     password: Optional[str] = ""
     extra_config: Optional[dict] = {}
     poll_interval_hours: Optional[int] = 6
+    pull_on_save: Optional[bool] = False
 
 
 class ScannerUpdate(BaseModel):
@@ -60,24 +65,32 @@ async def list_scanners(client_id: str, user=Depends(get_current_user)):
 
 @router.post("/clients/{client_id}/scanners", status_code=201)
 async def create_scanner(client_id: str, body: ScannerCreate,
+                          background_tasks: BackgroundTasks,
                           user=Depends(get_current_user)):
     if body.scanner_type not in SUPPORTED_TYPES:
         raise HTTPException(400, f"Unsupported scanner type. Must be one of: {SUPPORTED_TYPES}")
     client = await db.get_client(client_id)
     if not client:
         raise HTTPException(404, "Client not found")
+    # Map wizard sub-types to canonical DB type; preserve original in extra_config
+    db_type = _TYPE_MAP.get(body.scanner_type, body.scanner_type)
+    extra = dict(body.extra_config or {})
+    if body.scanner_type != db_type:
+        extra.setdefault("scanner_subtype", body.scanner_type)
     config = await db.create_scanner_config(
         client_id=client_id,
-        scanner_type=body.scanner_type,
+        scanner_type=db_type,
         label=body.label,
         host_url=body.host_url or "",
         api_key_enc=encrypt(body.api_key) if body.api_key else "",
         secret_key_enc=encrypt(body.secret_key) if body.secret_key else "",
         username_enc=encrypt(body.username) if body.username else "",
         password_enc=encrypt(body.password) if body.password else "",
-        extra_config=body.extra_config or {},
+        extra_config=extra,
         poll_interval_hours=body.poll_interval_hours,
     )
+    if body.pull_on_save:
+        background_tasks.add_task(_run_scanner, config)
     return _mask(config)
 
 

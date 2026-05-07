@@ -1,0 +1,1645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ThreatPulse — Scanner &amp; SIEM Integrations</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080a0d;--bg2:#0c0f14;--bg3:#111620;--bg4:#161c28;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#c9d4e3;--muted:#4e5d72;--dim:#1e2836;
+  --teal:#00d4aa;--teal-d:rgba(0,212,170,0.08);--teal-m:rgba(0,212,170,0.15);
+  --red:#f0595a;--red-d:rgba(240,89,90,0.1);
+  --amber:#e8a530;--amber-d:rgba(232,165,48,0.1);
+  --blue:#4d9de0;--blue-d:rgba(77,157,224,0.1);
+  --purple:#9b8ef5;--green:#3dd68c;
+  --mono:'JetBrains Mono',monospace;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:12px}
+::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#1e2836}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px)}
+
+.shell{display:flex;flex-direction:column;height:100vh}
+.topbar{display:flex;align-items:center;gap:12px;padding:0 20px;height:44px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
+.body-area{display:grid;grid-template-columns:220px 1fr;flex:1;overflow:hidden}
+
+/* ── Sidebar ── */
+.sidebar{background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.sb-actions{display:flex;flex-direction:column;gap:6px;padding:10px 10px 8px;border-bottom:1px solid var(--border);flex-shrink:0}
+.add-btn{font-family:var(--mono);font-size:8px;letter-spacing:1px;padding:6px 10px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:all .12s;text-align:left}
+.add-btn:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-d)}
+.add-btn.siem:hover{border-color:var(--purple);color:var(--purple);background:rgba(155,142,245,.08)}
+.sb-scroll{flex:1;overflow-y:auto}
+.sb-group-hdr{font-size:7px;letter-spacing:2px;color:var(--muted);padding:10px 10px 4px;text-transform:uppercase;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:1}
+.sb-item{display:flex;align-items:center;gap:7px;padding:7px 10px;cursor:pointer;border-left:2px solid transparent;transition:all .12s;min-height:44px}
+.sb-item:hover{background:rgba(255,255,255,.02);color:var(--text)}
+.sb-item.active{background:var(--teal-d);border-left-color:var(--teal)}
+.sb-ico{font-size:13px;flex-shrink:0;width:16px;text-align:center}
+.sb-info{flex:1;min-width:0}
+.sb-label{font-size:9px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-sub{font-size:8px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.sb-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.sb-dot.green{background:var(--green)}
+.sb-dot.amber{background:var(--amber)}
+.sb-dot.red{background:var(--red)}
+.sb-dot.gray{background:var(--muted)}
+.sb-empty{font-size:8px;color:var(--muted);padding:10px 12px;font-style:italic}
+
+/* ── Main panel ── */
+.main-panel{overflow-y:auto;background:var(--bg)}
+
+/* Empty state */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:400px;color:var(--muted);gap:14px;text-align:center;padding:40px}
+.empty-ico{font-size:32px;color:var(--dim);margin-bottom:4px}
+.empty-title{font-size:10px;letter-spacing:2px;color:var(--muted)}
+.empty-sub{font-size:9px;color:var(--dim);max-width:300px;line-height:1.7}
+
+/* Detail view */
+.detail-hdr{display:flex;align-items:center;gap:12px;padding:18px 24px;border-bottom:1px solid var(--border);background:var(--bg2);flex-shrink:0}
+.det-ico{font-size:22px;flex-shrink:0}
+.det-info{flex:1}
+.det-label{font-size:13px;font-weight:600;letter-spacing:1px;margin-bottom:3px}
+.det-sub{font-size:9px;color:var(--muted)}
+.det-status{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border:1px solid;font-size:8px;letter-spacing:1px}
+.det-status.green{border-color:rgba(61,214,140,.4);color:var(--green)}
+.det-status.amber{border-color:rgba(232,165,48,.4);color:var(--amber)}
+.det-status.red{border-color:rgba(240,89,90,.4);color:var(--red)}
+.det-status.gray{border-color:var(--border);color:var(--muted)}
+.det-actions{display:flex;gap:7px;flex-shrink:0}
+.act-btn{font-family:var(--mono);font-size:8px;letter-spacing:1px;padding:5px 12px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:all .12s}
+.act-btn:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-d)}
+.act-btn.primary{border-color:var(--teal);color:var(--teal);background:var(--teal-d)}
+.act-btn.primary:hover{background:var(--teal-m)}
+.act-btn:disabled{opacity:.4;cursor:not-allowed}
+
+.detail-body{padding:20px 24px}
+.d-section{margin-bottom:24px}
+.d-hdr{font-size:8px;letter-spacing:3px;color:var(--teal);text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.d-hdr::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* Stat cards */
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px}
+.stat-card{background:var(--bg2);border:1px solid var(--border);padding:12px 14px}
+.stat-card-label{font-size:7px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;text-transform:uppercase}
+.stat-card-val{font-size:20px;font-weight:700}
+.stat-card-val.cr{color:var(--red)}.stat-card-val.hi{color:var(--amber)}.stat-card-val.te{color:var(--teal)}.stat-card-val.gr{color:var(--green)}
+
+/* Config grid */
+.cfg-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.cfg-item{background:var(--bg2);border:1px solid var(--border);padding:10px 12px}
+.cfg-key{font-size:7px;letter-spacing:1.5px;color:var(--muted);margin-bottom:4px;text-transform:uppercase}
+.cfg-val{font-size:9px;color:var(--text);word-break:break-all}
+.cfg-val.masked{color:var(--muted);letter-spacing:3px}
+
+/* Pill row */
+.pill-row{display:flex;gap:5px;flex-wrap:wrap}
+.pill{font-size:7px;letter-spacing:.5px;padding:3px 8px;border:1px solid var(--border);color:var(--muted)}
+.pill.cr{border-color:rgba(240,89,90,.4);color:var(--red)}
+.pill.hi{border-color:rgba(232,165,48,.4);color:var(--amber)}
+.pill.me{border-color:rgba(77,157,224,.4);color:var(--blue)}
+.pill.lo{border-color:var(--border);color:var(--muted)}
+.pill.info{border-color:rgba(155,142,245,.4);color:var(--purple)}
+
+/* Field mapping table */
+.fmap-table{width:100%;border-collapse:collapse;font-size:9px}
+.fmap-table th{font-size:7px;letter-spacing:1.5px;color:var(--muted);padding:6px 10px;border-bottom:1px solid var(--border);text-align:left;text-transform:uppercase}
+.fmap-table td{padding:6px 10px;border-bottom:1px solid var(--border);color:var(--text)}
+.fmap-table tr:last-child td{border-bottom:none}
+.fmap-arrow{color:var(--muted)}
+.fmap-badge{font-size:7px;padding:1px 5px;border:1px solid}
+.fmap-badge.ok{border-color:rgba(61,214,140,.4);color:var(--green)}
+.fmap-badge.warn{border-color:rgba(232,165,48,.4);color:var(--amber)}
+.fmap-badge.skip{border-color:var(--border);color:var(--muted)}
+
+/* Pull history */
+.history-table{width:100%;border-collapse:collapse;font-size:9px}
+.history-table th{font-size:7px;letter-spacing:1.5px;color:var(--muted);padding:6px 10px;border-bottom:1px solid var(--border);text-align:left;text-transform:uppercase}
+.history-table td{padding:7px 10px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}
+.history-table tr:last-child td{border-bottom:none}
+.h-ok{color:var(--green)}
+.h-err{color:var(--red)}
+.h-err-msg{font-size:8px;color:var(--red);margin-top:2px}
+
+/* ── Wizard ── */
+.wizard-wrap{display:flex;flex-direction:column;height:100%;min-height:calc(100vh - 44px)}
+.wizard-topbar{display:flex;align-items:center;gap:10px;padding:12px 24px;border-bottom:1px solid var(--border);background:var(--bg2);flex-shrink:0}
+.wizard-title{font-size:10px;font-weight:600;letter-spacing:2px;flex:1}
+.wizard-close{font-family:var(--mono);font-size:8px;padding:4px 10px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:all .12s}
+.wizard-close:hover{border-color:var(--red);color:var(--red)}
+
+/* Step progress */
+.step-bar{display:flex;align-items:center;gap:0;padding:0 24px;height:40px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto}
+.step-item{display:flex;align-items:center;gap:0;flex-shrink:0}
+.step-num{width:20px;height:20px;border-radius:50%;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--muted);transition:all .2s;flex-shrink:0}
+.step-num.done{background:var(--teal);border-color:var(--teal);color:#000}
+.step-num.active{border-color:var(--teal);color:var(--teal)}
+.step-lbl{font-size:8px;color:var(--muted);letter-spacing:.5px;margin-left:6px;white-space:nowrap;transition:color .2s}
+.step-lbl.active{color:var(--teal)}
+.step-sep{width:24px;height:1px;background:var(--border);margin:0 8px;flex-shrink:0}
+
+/* Wizard content */
+.wizard-content{flex:1;overflow-y:auto;padding:24px}
+.wizard-nav{display:flex;align-items:center;gap:10px;padding:14px 24px;border-top:1px solid var(--border);background:var(--bg2);flex-shrink:0}
+.w-btn{font-family:var(--mono);font-size:8px;letter-spacing:1px;padding:7px 16px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:all .12s}
+.w-btn:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-d)}
+.w-btn.primary{border-color:var(--teal);color:var(--teal);background:var(--teal-d)}
+.w-btn.primary:hover{background:var(--teal-m)}
+.w-btn:disabled{opacity:.35;cursor:not-allowed}
+.w-btn.danger{border-color:rgba(240,89,90,.4);color:var(--red)}
+.w-btn.danger:hover{background:var(--red-d)}
+.w-spacer{flex:1}
+
+/* Type card grid */
+.type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
+.type-card{padding:18px 16px;background:var(--bg2);border:1px solid var(--border);cursor:pointer;transition:all .15s;display:flex;flex-direction:column;gap:6px}
+.type-card:hover{border-color:var(--border2)}
+.type-card.selected{border-color:var(--teal);background:var(--teal-d)}
+.tc-ico{font-size:18px;margin-bottom:2px}
+.tc-name{font-size:10px;font-weight:600;letter-spacing:.5px}
+.tc-auth{font-size:8px;color:var(--teal);letter-spacing:.5px}
+.tc-desc{font-size:8px;color:var(--muted);line-height:1.6}
+.type-info{padding:12px 16px;background:var(--bg2);border:1px solid var(--teal);font-size:9px;color:var(--text);line-height:1.7;display:none}
+.type-info.show{display:block}
+
+/* Form elements */
+.form-section{margin-bottom:20px}
+.form-section-title{font-size:8px;letter-spacing:2px;color:var(--teal);text-transform:uppercase;margin-bottom:12px}
+.form-group{margin-bottom:14px}
+.form-label{display:block;font-size:8px;letter-spacing:1.5px;color:var(--muted);margin-bottom:6px;text-transform:uppercase}
+.form-label span{color:var(--red);margin-left:2px}
+.form-input{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:10px;padding:8px 10px;outline:none;transition:border-color .15s}
+.form-input:focus{border-color:var(--teal);background:var(--bg4)}
+.form-input::placeholder{color:var(--muted)}
+.form-select{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:10px;padding:8px 10px;outline:none;cursor:pointer}
+.form-select:focus{border-color:var(--teal)}
+.form-hint{font-size:8px;color:var(--muted);margin-top:4px;line-height:1.5}
+.pw-wrap{position:relative}
+.pw-wrap .form-input{padding-right:36px}
+.pw-eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:2px}
+.pw-eye:hover{color:var(--teal)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.form-textarea{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:10px;padding:8px 10px;outline:none;resize:vertical;min-height:100px;transition:border-color .15s;line-height:1.6}
+.form-textarea:focus{border-color:var(--teal)}
+.note-box{padding:10px 12px;background:rgba(0,212,170,.06);border:1px solid rgba(0,212,170,.2);font-size:8px;color:var(--teal);line-height:1.6;margin-bottom:14px}
+.warn-box{padding:10px 12px;background:rgba(232,165,48,.06);border:1px solid rgba(232,165,48,.2);font-size:8px;color:var(--amber);line-height:1.6;margin-bottom:14px}
+
+/* Toggle */
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)}
+.toggle-label{font-size:9px;color:var(--text)}
+.toggle-sub{font-size:8px;color:var(--muted);margin-top:2px}
+.toggle{width:32px;height:17px;background:var(--bg3);border:1px solid var(--border);border-radius:9px;cursor:pointer;position:relative;transition:background .2s;flex-shrink:0}
+.toggle.on{background:rgba(0,212,170,.25);border-color:var(--teal)}
+.toggle::after{content:'';position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;background:var(--muted);transition:all .2s}
+.toggle.on::after{left:17px;background:var(--teal)}
+
+/* Severity filter pills */
+.sev-pills{display:flex;gap:6px;flex-wrap:wrap}
+.sev-pill{font-family:var(--mono);font-size:8px;letter-spacing:.5px;padding:4px 10px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:all .12s}
+.sev-pill:hover{border-color:var(--border2);color:var(--text)}
+.sev-pill.on{border-color:var(--teal);color:var(--teal);background:var(--teal-d)}
+.sev-pill[data-sev="CRITICAL"].on{border-color:var(--red);color:var(--red);background:var(--red-d)}
+.sev-pill[data-sev="HIGH"].on{border-color:var(--amber);color:var(--amber);background:var(--amber-d)}
+.sev-pill[data-sev="MEDIUM"].on{border-color:var(--blue);color:var(--blue);background:var(--blue-d)}
+
+/* Test results */
+.test-spinner{display:flex;flex-direction:column;align-items:center;gap:14px;padding:40px;color:var(--muted);font-size:9px}
+.spinner-ring{width:32px;height:32px;border:2px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.test-results-table{width:100%;border-collapse:collapse;margin-bottom:14px}
+.test-results-table td{padding:8px 12px;border-bottom:1px solid var(--border);font-size:9px}
+.test-results-table td:first-child{color:var(--muted);width:45%}
+.test-check{font-size:9px;font-weight:600}
+.test-check.pass{color:var(--green)}
+.test-check.fail{color:var(--red)}
+.test-check.warn{color:var(--amber)}
+.test-error{padding:10px 12px;background:var(--red-d);border:1px solid rgba(240,89,90,.3);font-size:9px;color:var(--red);line-height:1.6;margin-bottom:14px}
+.sample-event{background:var(--bg3);border:1px solid var(--border);padding:8px 10px;font-size:8px;color:var(--muted);margin-bottom:6px;max-height:80px;overflow:hidden}
+
+/* Field mapping */
+.fmap-edit-table{width:100%;border-collapse:collapse}
+.fmap-edit-table th{font-size:7px;letter-spacing:1.5px;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--border);text-align:left;text-transform:uppercase}
+.fmap-edit-table td{padding:5px 8px;border-bottom:1px solid var(--border);font-size:9px}
+.fmap-sel{background:var(--bg3);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:9px;padding:3px 6px;width:100%}
+.fmap-req{color:var(--red);font-size:7px;letter-spacing:.5px}
+.fmap-unmapped{color:var(--amber);font-size:7px;letter-spacing:.5px}
+
+/* Query editor */
+.qeditor-wrap{position:relative}
+.qeditor-lang{position:absolute;top:8px;right:10px;font-size:7px;letter-spacing:1px;color:var(--muted)}
+.qeditor{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--teal);font-family:var(--mono);font-size:10px;padding:12px;outline:none;resize:vertical;min-height:120px;line-height:1.7;transition:border-color .15s}
+.qeditor:focus{border-color:var(--teal)}
+
+/* Preview events */
+.preview-event{background:var(--bg3);border:1px solid var(--border);padding:10px 12px;margin-bottom:8px;font-size:8px;color:var(--muted);line-height:1.8;white-space:pre-wrap;max-height:120px;overflow-y:auto}
+
+/* Skeleton */
+.skel{background:var(--bg3);animation:shim 1.4s ease-in-out infinite;border-radius:2px;display:inline-block}
+@keyframes shim{0%,100%{opacity:.3}50%{opacity:.8}}
+</style>
+</head>
+<body data-page-title="SCANNER &amp; SIEM INTEGRATIONS" data-back-url="/index.html">
+
+<div class="shell">
+  <div class="topbar"></div>
+  <div class="body-area">
+
+    <!-- ── Sidebar ── -->
+    <div class="sidebar">
+      <div class="sb-actions">
+        <button class="add-btn" onclick="startWizard('scanner')">+ ADD SCANNER</button>
+        <button class="add-btn siem" onclick="startWizard('siem')">+ ADD SIEM</button>
+      </div>
+      <div class="sb-scroll">
+        <div class="sb-group-hdr">VULNERABILITY SCANNERS</div>
+        <div id="scannerList"><div class="sb-empty">Loading...</div></div>
+        <div class="sb-group-hdr">SIEM SOURCES</div>
+        <div id="siemList"><div class="sb-empty">Loading...</div></div>
+      </div>
+    </div>
+
+    <!-- ── Main panel ── -->
+    <div class="main-panel" id="mainPanel">
+
+      <!-- Empty state -->
+      <div id="viewEmpty" class="empty-state">
+        <div class="empty-ico">&#9636;</div>
+        <div class="empty-title">NO INTEGRATION SELECTED</div>
+        <div class="empty-sub">Select an integration from the sidebar to view its details, or click Add Scanner / Add SIEM to configure a new connection.</div>
+      </div>
+
+      <!-- Detail view -->
+      <div id="viewDetail" style="display:none">
+        <div class="detail-hdr">
+          <div class="det-ico" id="detIco">&#9632;</div>
+          <div class="det-info">
+            <div class="det-label" id="detLabel">—</div>
+            <div class="det-sub" id="detSub">—</div>
+          </div>
+          <div id="detStatus" class="det-status gray">NEVER PULLED</div>
+          <div class="det-actions">
+            <button class="act-btn" onclick="openEditModal()">EDIT</button>
+            <button class="act-btn primary" id="pullNowBtn" onclick="pullNow()">PULL NOW</button>
+          </div>
+        </div>
+        <div class="detail-body">
+          <div class="stat-row" id="detStats">
+            <div class="stat-card"><div class="stat-card-label">Critical Open</div><div class="stat-card-val cr" id="dsCrit">—</div></div>
+            <div class="stat-card"><div class="stat-card-label">High Open</div><div class="stat-card-val hi" id="dsHigh">—</div></div>
+            <div class="stat-card"><div class="stat-card-label" id="dsLabel3">Assets Scanned</div><div class="stat-card-val te" id="dsMid">—</div></div>
+            <div class="stat-card"><div class="stat-card-label">Last Pull</div><div class="stat-card-val gr" id="dsLast">—</div></div>
+          </div>
+
+          <div class="d-section">
+            <div class="d-hdr">Configuration</div>
+            <div class="cfg-grid" id="detCfgGrid"></div>
+          </div>
+
+          <div class="d-section" id="detSevSection">
+            <div class="d-hdr">Severity Filters</div>
+            <div class="pill-row" id="detSevPills"></div>
+          </div>
+
+          <div class="d-section" id="detMappingSection">
+            <div class="d-hdr">Field Mapping</div>
+            <table class="fmap-table">
+              <thead><tr><th>Source Field</th><th></th><th>PhantomFeed Field</th><th>Status</th></tr></thead>
+              <tbody id="detMappingBody"></tbody>
+            </table>
+          </div>
+
+          <div class="d-section">
+            <div class="d-hdr">Pull History</div>
+            <table class="history-table">
+              <thead><tr><th>Timestamp</th><th>Status</th><th>Findings</th><th>Assets</th><th>Error</th></tr></thead>
+              <tbody id="detHistoryBody"><tr><td colspan="5" style="color:var(--muted);padding:12px 10px;font-size:9px">Loading...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Wizard view -->
+      <div id="viewWizard" style="display:none">
+        <div class="wizard-wrap">
+          <div class="wizard-topbar">
+            <span class="wizard-title" id="wizardTitle">ADD SCANNER</span>
+            <button class="wizard-close" onclick="cancelWizard()">✕ CANCEL</button>
+          </div>
+          <div class="step-bar" id="stepBar"></div>
+          <div class="wizard-content" id="wizardContent"></div>
+          <div class="wizard-nav">
+            <button class="w-btn" id="btnBack" onclick="wizardBack()" style="display:none">&#8592; BACK</button>
+            <div class="w-spacer"></div>
+            <button class="w-btn primary" id="btnNext" onclick="wizardNext()">NEXT &#8594;</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div id="editModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:none;align-items:center;justify-content:center">
+  <div style="background:var(--bg2);border:1px solid var(--border2);padding:28px;width:420px;max-height:80vh;overflow-y:auto">
+    <div style="font-size:10px;font-weight:600;letter-spacing:2px;margin-bottom:16px">EDIT INTEGRATION</div>
+    <div id="editModalBody"></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="w-btn primary" onclick="saveEdit()" style="flex:1">SAVE</button>
+      <button class="w-btn" onclick="closeEditModal()">CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const TOKEN = localStorage.getItem('token');
+const API   = '/api/v1';
+function authHdr() { return {'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json'}; }
+function esc(s) { const d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
+
+// ── Scanner type definitions ────────────────────────────────────────────────
+const SCANNER_TYPES = {
+  tenable_io: {
+    label: 'Tenable.io', icon: '&#9632;', auth: 'access_key + secret_key',
+    desc: 'Tenable cloud-based VM. Uses cloud.tenable.com — no host needed.',
+    info: 'Tenable.io uses API key authentication. Generate keys in Tenable.io → My Account → API Keys. The access key identifies your account; the secret key authorises API calls.'
+  },
+  tenable_sc: {
+    label: 'Tenable.sc', icon: '&#9632;', auth: 'host + username + password',
+    desc: 'Tenable SecurityCenter — on-premises deployment.',
+    info: 'Enter the hostname or IP of your SecurityCenter instance. Use an account with "Security Manager" role or higher for full asset/vulnerability access.'
+  },
+  qualys: {
+    label: 'Qualys VMDR', icon: '&#9670;', auth: 'platform URL + username + password',
+    desc: 'Cloud-native VM platform. Platform URL varies by region.',
+    info: 'Select your Qualys platform region from the dropdown. Use a Qualys user account with "Manager" or "Unit Manager" role. API access must be enabled in Qualys → User → Roles.'
+  },
+  rapid7: {
+    label: 'Rapid7 InsightVM', icon: '&#9650;', auth: 'host + username + password',
+    desc: 'Rapid7 InsightVM — on-premises or cloud console.',
+    info: 'Enter the InsightVM console host and port (default 3780). Use an account with "Global Administrator" or "System Administrator" role for full access.'
+  },
+  crowdstrike: {
+    label: 'CrowdStrike Falcon', icon: '&#9679;', auth: 'client_id + client_secret',
+    desc: 'Falcon Spotlight — OAuth2 cloud API, no host required.',
+    info: 'Create an API client in Falcon → API Clients & Keys with "Spotlight Vulnerabilities: Read" scope. The client_id and client_secret are shown once at creation time.'
+  },
+  nexpose: {
+    label: 'Nexpose', icon: '&#9670;', auth: 'host + username + password',
+    desc: 'Rapid7 Nexpose — legacy on-premises scanner.',
+    info: 'Nexpose is the previous name for Rapid7 InsightVM. Enter the Nexpose console host and port (default 3780). Uses the same REST API as InsightVM.'
+  },
+};
+
+// ── SIEM type definitions ───────────────────────────────────────────────────
+const SIEM_TYPES = {
+  splunk: {
+    label: 'Splunk', icon: '&#9632;', auth: 'host + management port + token',
+    desc: 'Splunk Enterprise or Splunk Cloud.',
+    info: 'Generate an auth token in Splunk → Settings → Tokens, or use username/password. Management port is 8089 by default. REST API must be accessible from the ThreatPulse server.',
+    defaultQuery: 'index=security (severity="critical" OR severity="high") earliest=-24h\n| table _time, host, src_ip, signature, severity, cve_id'
+  },
+  sentinel: {
+    label: 'Microsoft Sentinel', icon: '&#9670;', auth: 'tenant + client + secret + workspace',
+    desc: 'Azure cloud-native SIEM.',
+    info: 'Register an app in Azure AD with "Log Analytics Reader" role on the Sentinel workspace. Use the Application (client) ID, Directory (tenant) ID, and a client secret. Workspace ID is found in the Log Analytics workspace Overview.',
+    defaultQuery: "SecurityAlert\n| where TimeGenerated > ago(24h)\n| where AlertSeverity in ('High','Critical')\n| project TimeGenerated, AlertName, AlertSeverity, ExtendedProperties, Entities"
+  },
+  qradar: {
+    label: 'IBM QRadar', icon: '&#9679;', auth: 'host + SEC API token',
+    desc: 'IBM QRadar — on-premises or cloud.',
+    info: 'Generate a SEC token in QRadar → Admin → Authorized Services. The token is passed as the SEC header value. Use HTTPS unless your QRadar is configured for plain HTTP.',
+    defaultQuery: 'SELECT * FROM events WHERE severity > 5 LAST 24 HOURS'
+  },
+  elastic: {
+    label: 'Elastic SIEM', icon: '&#9650;', auth: 'host + port + API key',
+    desc: 'Elastic Security / Kibana SIEM.',
+    info: 'Create an API key in Kibana → Stack Management → API Keys with read access to .siem-signals* and security_solution indices. Format: base64(id:api_key_value).',
+    defaultQuery: JSON.stringify({
+      "query": {"bool": {"filter": [{"range": {"@timestamp": {"gte": "now-24h"}}},{"terms": {"kibana.alert.severity": ["critical","high"]}}]}},
+      "size": 100
+    }, null, 2)
+  },
+  chronicle: {
+    label: 'Google Chronicle', icon: '&#9636;', auth: 'service account JSON',
+    desc: 'Google Chronicle SecOps (Cloud-native SIEM).',
+    info: 'Create a service account in Google Cloud IAM with the "Chronicle API Viewer" role. Download the JSON key file and paste the full contents into the credentials field.',
+    defaultQuery: 'severity = "CRITICAL" OR severity = "HIGH"'
+  },
+};
+
+// PhantomFeed canonical fields
+const PF_FIELDS = ['title','severity','cvss','hostname','ip_address','cve_id','plugin_id','description','solution','vendor','product','skip'];
+
+// ── State ───────────────────────────────────────────────────────────────────
+let state = {
+  view: 'empty',
+  wizardMode: null,
+  wizardStep: 1,
+  wizardData: {},
+  testResults: null,
+  selectedId: null,
+  selectedConfigType: null,
+  integrations: {scanners: [], siems: []},
+  clients: [],
+};
+
+// ── Sidebar ─────────────────────────────────────────────────────────────────
+async function loadSidebar() {
+  try {
+    const res = await fetch(`${API}/integrations/all`, {headers: authHdr()});
+    if (!res.ok) throw new Error(res.status);
+    const d = await res.json();
+    state.integrations = d;
+    renderSidebar();
+  } catch(e) {
+    document.getElementById('scannerList').innerHTML = '<div class="sb-empty">Failed to load</div>';
+    document.getElementById('siemList').innerHTML = '<div class="sb-empty">Failed to load</div>';
+  }
+}
+
+function renderSidebar() {
+  const scanners = state.integrations.scanners || [];
+  const siems    = state.integrations.siems || [];
+
+  const scannerEl = document.getElementById('scannerList');
+  const siemEl    = document.getElementById('siemList');
+
+  if (!scanners.length) {
+    scannerEl.innerHTML = '<div class="sb-empty">No scanners configured</div>';
+  } else {
+    scannerEl.innerHTML = scanners.map(s => sbItem(s)).join('');
+  }
+
+  if (!siems.length) {
+    siemEl.innerHTML = '<div class="sb-empty">No SIEMs configured</div>';
+  } else {
+    siemEl.innerHTML = siems.map(s => sbItem(s)).join('');
+  }
+}
+
+function sbItem(item) {
+  const isActive = state.selectedId === item.id;
+  const status = item.connection_status || 'gray';
+  const typeLabel = item.config_type === 'scanner'
+    ? (SCANNER_TYPES[item.type] || SCANNER_TYPES[item.type] || {label: item.type}).label
+    : (SIEM_TYPES[item.type] || {label: item.type}).label;
+  const ico = item.config_type === 'scanner'
+    ? (SCANNER_TYPES[item.type] || {icon:'&#9632;'}).icon
+    : (SIEM_TYPES[item.type] || {icon:'&#9632;'}).icon;
+  return `<div class="sb-item${isActive?' active':''}" onclick="selectIntegration('${esc(item.id)}','${esc(item.config_type)}')">
+    <span class="sb-ico">${ico}</span>
+    <div class="sb-info">
+      <div class="sb-label">${esc(item.label)}</div>
+      <div class="sb-sub">${esc(item.client_name)} · ${esc(typeLabel)}</div>
+    </div>
+    <div class="sb-dot ${status}"></div>
+  </div>`;
+}
+
+// ── Detail view ─────────────────────────────────────────────────────────────
+async function selectIntegration(id, configType) {
+  state.selectedId = id;
+  state.selectedConfigType = configType;
+  showView('detail');
+  renderSidebar();
+
+  const config = configType === 'scanner'
+    ? await fetch(`${API}/clients/_/scanners/${id}`, {headers: authHdr()}).then(r=>r.ok?r.json():null).catch(()=>null)
+    : await fetch(`${API}/clients/_/siems/${id}`, {headers: authHdr()}).then(r=>r.ok?r.json():null).catch(()=>null);
+
+  // Fall back to finding from the all-integrations listing
+  const fromList = (configType === 'scanner' ? state.integrations.scanners : state.integrations.siems)
+    .find(s => s.id === id);
+
+  if (!fromList) return;
+
+  const clientId = fromList.client_id;
+  const clientName = fromList.client_name;
+
+  // Get config via client-scoped endpoint
+  const cfgRes = await fetch(`${API}/clients/${clientId}/${configType === 'scanner' ? 'scanners' : 'siems'}/${id}`, {headers: authHdr()});
+  const cfg = cfgRes.ok ? await cfgRes.json() : fromList;
+
+  // Header
+  const typeInfo = configType === 'scanner'
+    ? (SCANNER_TYPES[cfg.scanner_type || cfg.type] || {label: cfg.scanner_type || cfg.type, icon: '&#9632;'})
+    : (SIEM_TYPES[cfg.siem_type || cfg.type] || {label: cfg.siem_type || cfg.type, icon: '&#9632;'});
+  document.getElementById('detIco').innerHTML = typeInfo.icon;
+  document.getElementById('detLabel').textContent = cfg.label;
+  document.getElementById('detSub').textContent = `${clientName} · ${typeInfo.label} · ${cfg.poll_interval_hours || fromList.poll_interval_hours || 6}h interval`;
+
+  const st = fromList.connection_status || 'gray';
+  const stLabels = {green:'CONNECTED', amber:'WARNING', red:'ERROR', gray:'NEVER PULLED'};
+  const detStatus = document.getElementById('detStatus');
+  detStatus.className = `det-status ${st}`;
+  detStatus.textContent = stLabels[st] || st.toUpperCase();
+
+  // Store client_id for poll-now
+  document.getElementById('pullNowBtn').dataset.clientId = clientId;
+  document.getElementById('pullNowBtn').dataset.id = id;
+  document.getElementById('pullNowBtn').dataset.type = configType;
+
+  // Severity label for SIEM
+  document.getElementById('dsLabel3').textContent = configType === 'siem' ? 'Alerts/Pull' : 'Assets Scanned';
+
+  // Stats from scan findings
+  if (configType === 'scanner') {
+    const sf = await fetch(`${API}/clients/${clientId}/scan-findings/summary?scanner_id=${id}`, {headers: authHdr()}).catch(()=>null);
+    if (sf && sf.ok) {
+      const sd = await sf.json();
+      const c = sd.severity_counts || {};
+      document.getElementById('dsCrit').textContent = (c.CRITICAL || 0).toLocaleString();
+      document.getElementById('dsHigh').textContent = (c.HIGH || 0).toLocaleString();
+      document.getElementById('dsMid').textContent  = '—';
+    }
+  }
+
+  const lp = cfg.last_polled || fromList.last_polled;
+  document.getElementById('dsLast').textContent = lp ? lp.substring(0,10) : '—';
+
+  // Config grid
+  const extra = cfg.extra_config || {};
+  const cfgItems = [];
+  if (cfg.host_url) cfgItems.push(['Host', cfg.host_url]);
+  cfgItems.push(['Type', (cfg.scanner_type || cfg.siem_type || cfg.type || '').toUpperCase()]);
+  cfgItems.push(['Poll Interval', `${cfg.poll_interval_hours || fromList.poll_interval_hours || 6} hours`]);
+  cfgItems.push(['Status', cfg.last_status || fromList.last_status || '—']);
+  if (cfg.api_key_set) cfgItems.push(['API Key', '••••••••']);
+  if (cfg.secret_key_set) cfgItems.push(['Secret Key', '••••••••']);
+  if (cfg.username_set) cfgItems.push(['Username', '••••••••']);
+  if (cfg.password_set) cfgItems.push(['Password', '••••••••']);
+  document.getElementById('detCfgGrid').innerHTML = cfgItems.map(([k,v]) =>
+    `<div class="cfg-item"><div class="cfg-key">${esc(k)}</div><div class="cfg-val${k.includes('Key')||k.includes('Pass')||k.includes('Secret')?' masked':''}">${esc(v)}</div></div>`
+  ).join('');
+
+  // Severity filters
+  const sevFilters = extra.severity_filter || [];
+  const sevEl = document.getElementById('detSevPills');
+  if (sevFilters.length) {
+    const sevClass = {CRITICAL:'cr',HIGH:'hi',MEDIUM:'me',LOW:'lo',INFO:'info'};
+    sevEl.innerHTML = sevFilters.map(s => `<span class="pill ${sevClass[s]||''}">${esc(s)}</span>`).join('');
+    document.getElementById('detSevSection').style.display = '';
+  } else {
+    document.getElementById('detSevSection').style.display = 'none';
+  }
+
+  // Field mapping
+  const mapping = extra.field_mapping || {};
+  const mapBody = document.getElementById('detMappingBody');
+  const mapKeys = Object.keys(mapping);
+  if (mapKeys.length) {
+    mapBody.innerHTML = mapKeys.map(src => {
+      const tgt = mapping[src];
+      const isRequired = ['title','severity'].includes(tgt);
+      const badge = tgt === 'skip' ? '<span class="fmap-badge skip">SKIP</span>'
+        : isRequired ? '<span class="fmap-badge ok">MAPPED</span>'
+        : '<span class="fmap-badge ok">MAPPED</span>';
+      return `<tr><td>${esc(src)}</td><td class="fmap-arrow">→</td><td>${esc(tgt)}</td><td>${badge}</td></tr>`;
+    }).join('');
+    document.getElementById('detMappingSection').style.display = '';
+  } else {
+    document.getElementById('detMappingSection').style.display = 'none';
+  }
+
+  // Pull history
+  const histRes = await fetch(`${API}/clients/${clientId}/${configType === 'scanner' ? 'scanners' : 'siems'}/${id}/pull-history`, {headers: authHdr()});
+  const histBody = document.getElementById('detHistoryBody');
+  if (histRes.ok) {
+    const hd = await histRes.json();
+    const history = hd.history || [];
+    if (!history.length) {
+      histBody.innerHTML = '<tr><td colspan="5" style="color:var(--muted);padding:12px 10px;font-size:9px">No pulls recorded yet</td></tr>';
+    } else {
+      histBody.innerHTML = history.map(h => {
+        const isOk = h.status === 'ok';
+        return `<tr>
+          <td>${(h.pulled_at||'').substring(0,19).replace('T',' ')}</td>
+          <td class="h-${isOk?'ok':'err'}">${esc(h.status)}</td>
+          <td>${h.finding_count != null ? h.finding_count : '—'}</td>
+          <td>${h.asset_count != null ? h.asset_count : '—'}</td>
+          <td>${h.error_message ? `<span class="h-err">${esc(h.error_message.substring(0,80))}</span>` : '—'}</td>
+        </tr>`;
+      }).join('');
+    }
+  } else {
+    histBody.innerHTML = '<tr><td colspan="5" style="color:var(--muted);font-size:9px;padding:10px">Failed to load history</td></tr>';
+  }
+}
+
+async function pullNow() {
+  const btn = document.getElementById('pullNowBtn');
+  const clientId = btn.dataset.clientId;
+  const id = btn.dataset.id;
+  const configType = btn.dataset.type;
+  btn.disabled = true;
+  btn.textContent = 'PULLING...';
+  const path = configType === 'scanner' ? `scanners/${id}/poll` : `siems/${id}/poll`;
+  try {
+    const res = await fetch(`${API}/clients/${clientId}/${path}`, {method:'POST', headers: authHdr()});
+    if (res.ok) {
+      btn.textContent = 'TRIGGERED';
+      setTimeout(() => { btn.disabled = false; btn.textContent = 'PULL NOW'; loadSidebar(); }, 2000);
+    } else {
+      btn.disabled = false; btn.textContent = 'PULL NOW';
+    }
+  } catch(e) { btn.disabled = false; btn.textContent = 'PULL NOW'; }
+}
+
+// ── Edit modal ────────────────────────────────────────────────────────────────
+function openEditModal() {
+  const fromList = (state.selectedConfigType === 'scanner' ? state.integrations.scanners : state.integrations.siems)
+    .find(s => s.id === state.selectedId);
+  if (!fromList) return;
+  document.getElementById('editModalBody').innerHTML = `
+    <div class="form-group">
+      <label class="form-label">Label</label>
+      <input type="text" class="form-input" id="editLabel" value="${esc(fromList.label)}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Poll Interval (hours)</label>
+      <input type="number" class="form-input" id="editInterval" value="${fromList.poll_interval_hours||6}" min="1">
+    </div>
+  `;
+  document.getElementById('editModal').style.display = 'flex';
+}
+function closeEditModal() { document.getElementById('editModal').style.display = 'none'; }
+async function saveEdit() {
+  const label = document.getElementById('editLabel').value.trim();
+  const interval = parseInt(document.getElementById('editInterval').value) || 6;
+  const fromList = (state.selectedConfigType === 'scanner' ? state.integrations.scanners : state.integrations.siems)
+    .find(s => s.id === state.selectedId);
+  if (!fromList) return;
+  const path = state.selectedConfigType === 'scanner'
+    ? `clients/${fromList.client_id}/scanners/${state.selectedId}`
+    : `clients/${fromList.client_id}/siems/${state.selectedId}`;
+  const res = await fetch(`${API}/${path}`, {
+    method: 'PATCH', headers: authHdr(),
+    body: JSON.stringify({label, poll_interval_hours: interval})
+  });
+  if (res.ok) { closeEditModal(); await loadSidebar(); selectIntegration(state.selectedId, state.selectedConfigType); }
+}
+
+// ── Wizard ────────────────────────────────────────────────────────────────────
+const SCANNER_STEPS = ['Choose Type','Connect','Test & Verify','Configure Filters','Field Mapping','Schedule'];
+const SIEM_STEPS    = ['Choose Type','Connect','Build Query','Test & Preview','Field Mapping','Schedule'];
+
+async function startWizard(mode) {
+  state.wizardMode = mode;
+  state.wizardStep = 1;
+  state.wizardData = {severityFilter: ['CRITICAL','HIGH','MEDIUM'], fieldMapping: {}};
+  state.testResults = null;
+  showView('wizard');
+  document.getElementById('wizardTitle').textContent = mode === 'scanner' ? 'ADD SCANNER' : 'ADD SIEM';
+  renderStepBar();
+  renderWizardStep();
+
+  // Load clients for step 2
+  if (!state.clients.length) {
+    try {
+      const r = await fetch(`${API}/admin/clients`, {headers: authHdr()});
+      if (r.ok) { const d = await r.json(); state.clients = d.clients || []; }
+    } catch(e) {}
+  }
+}
+
+function cancelWizard() { showView('empty'); state.selectedId = null; renderSidebar(); }
+
+function renderStepBar() {
+  const steps = state.wizardMode === 'scanner' ? SCANNER_STEPS : SIEM_STEPS;
+  const bar = document.getElementById('stepBar');
+  bar.innerHTML = steps.map((s, i) => {
+    const n = i + 1;
+    const done   = n < state.wizardStep;
+    const active = n === state.wizardStep;
+    const sep = i < steps.length - 1 ? '<div class="step-sep"></div>' : '';
+    return `<div class="step-item">
+      <div class="step-num${done?' done':active?' active':''}">
+        ${done ? '&#10003;' : n}
+      </div>
+      <span class="step-lbl${active?' active':''}">${s}</span>
+    </div>${sep}`;
+  }).join('');
+}
+
+function renderWizardStep() {
+  const content = document.getElementById('wizardContent');
+  const back    = document.getElementById('btnBack');
+  const next    = document.getElementById('btnNext');
+  back.style.display = state.wizardStep > 1 ? '' : 'none';
+  next.textContent = state.wizardStep === 6 ? 'SAVE &#10003;' : 'NEXT &#8594;';
+  next.className   = 'w-btn primary';
+  next.disabled    = false;
+
+  if (state.wizardMode === 'scanner') {
+    switch(state.wizardStep) {
+      case 1: content.innerHTML = renderScannerStep1(); break;
+      case 2: content.innerHTML = renderScannerStep2(); break;
+      case 3: content.innerHTML = renderScannerStep3Loading(); break;
+      case 4: content.innerHTML = renderScannerStep4(); break;
+      case 5: content.innerHTML = renderScannerStep5(); break;
+      case 6: content.innerHTML = renderScannerStep6(); break;
+    }
+  } else {
+    switch(state.wizardStep) {
+      case 1: content.innerHTML = renderSiemStep1(); break;
+      case 2: content.innerHTML = renderSiemStep2(); break;
+      case 3: content.innerHTML = renderSiemStep3(); break;
+      case 4: content.innerHTML = renderSiemStep4Loading(); break;
+      case 5: content.innerHTML = renderSiemStep5(); break;
+      case 6: content.innerHTML = renderSiemStep6(); break;
+    }
+  }
+}
+
+async function wizardNext() {
+  if (state.wizardMode === 'scanner') await scannerNext();
+  else await siemNext();
+}
+
+function wizardBack() {
+  // If on test step (3 for scanner, 4 for siem), go back directly
+  state.wizardStep--;
+  renderStepBar();
+  renderWizardStep();
+}
+
+// ── Scanner steps ─────────────────────────────────────────────────────────────
+
+function renderScannerStep1() {
+  return `<div>
+    <div class="form-section-title">CHOOSE SCANNER TYPE</div>
+    <div class="type-grid">
+      ${Object.entries(SCANNER_TYPES).map(([id, t]) => `
+        <div class="type-card${state.wizardData.type===id?' selected':''}" onclick="selectScannerType('${id}')">
+          <div class="tc-ico">${t.icon}</div>
+          <div class="tc-name">${esc(t.label)}</div>
+          <div class="tc-auth">${esc(t.auth)}</div>
+          <div class="tc-desc">${esc(t.desc)}</div>
+        </div>`).join('')}
+    </div>
+    <div class="type-info${state.wizardData.type?` show`:''}" id="typeInfoBox">
+      ${state.wizardData.type ? esc(SCANNER_TYPES[state.wizardData.type].info) : ''}
+    </div>
+  </div>`;
+}
+
+window.selectScannerType = function(id) {
+  state.wizardData.type = id;
+  renderWizardStep();
+};
+
+function renderScannerStep2() {
+  const t = state.wizardData.type;
+  const needsHost = ['tenable_sc','qualys','rapid7','nexpose'].includes(t);
+  const needsPort = ['tenable_sc','rapid7','nexpose'].includes(t);
+  const useApiKey = ['tenable_io','tenable_sc'].includes(t);
+  const useOAuth  = t === 'crowdstrike';
+  const isQualys  = t === 'qualys';
+
+  const clientOpts = state.clients.map(c =>
+    `<option value="${esc(c.id)}"${state.wizardData.client_id===c.id?' selected':''}>${esc(c.name)}</option>`
+  ).join('');
+
+  return `<div>
+    <div class="form-section-title">CONNECTION SETTINGS</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Integration Label <span>*</span></label>
+        <input class="form-input" id="f_label" placeholder="e.g. Prod Tenable" value="${esc(state.wizardData.label||'')}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Client <span>*</span></label>
+        <select class="form-select" id="f_client"><option value="">— Select client —</option>${clientOpts}</select>
+      </div>
+    </div>
+    ${isQualys ? `<div class="form-group">
+      <label class="form-label">Platform Region <span>*</span></label>
+      <select class="form-select" id="f_host">
+        <option value="https://qualysapi.qualys.com"${state.wizardData.host_url==='https://qualysapi.qualys.com'?' selected':''}>US1 — qualysapi.qualys.com</option>
+        <option value="https://qualysapi.qg2.apps.qualys.com"${state.wizardData.host_url==='https://qualysapi.qg2.apps.qualys.com'?' selected':''}>US2 — qg2.apps.qualys.com</option>
+        <option value="https://qualysapi.qg1.apps.qualys.eu">EU1 — qg1.apps.qualys.eu</option>
+        <option value="https://qualysapi.qg1.apps.qualys.in">IN1 — qg1.apps.qualys.in</option>
+        <option value="https://qualysapi.qg1.apps.qualys.ca">CA1 — qg1.apps.qualys.ca</option>
+        <option value="https://qualysapi.qg1.apps.qualys.com.au">AU1 — qg1.apps.qualys.com.au</option>
+      </select>
+    </div>` : needsHost ? `<div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Host URL <span>*</span></label>
+        <input class="form-input" id="f_host" placeholder="https://your-scanner.example.com" value="${esc(state.wizardData.host_url||'')}">
+      </div>
+      ${needsPort ? `<div class="form-group">
+        <label class="form-label">Port</label>
+        <input class="form-input" id="f_port" type="number" value="${state.wizardData.port||3780}" placeholder="3780">
+      </div>` : ''}
+    </div>` : ''}
+    ${useApiKey ? `
+    <div class="form-group">
+      <label class="form-label">Access Key <span>*</span></label>
+      <div class="pw-wrap">
+        <input class="form-input" id="f_api_key" type="password" placeholder="Access key" value="${esc(state.wizardData.api_key||'')}">
+        <button class="pw-eye" onclick="togglePw('f_api_key',this)">&#128065;</button>
+      </div>
+      <div class="form-hint">Found in Tenable.io → My Account → API Keys → Access Key</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Secret Key <span>*</span></label>
+      <div class="pw-wrap">
+        <input class="form-input" id="f_secret_key" type="password" placeholder="Secret key" value="${esc(state.wizardData.secret_key||'')}">
+        <button class="pw-eye" onclick="togglePw('f_secret_key',this)">&#128065;</button>
+      </div>
+      <div class="form-hint">Found in Tenable.io → My Account → API Keys → Secret Key</div>
+    </div>
+    ` : useOAuth ? `
+    <div class="form-group">
+      <label class="form-label">Client ID <span>*</span></label>
+      <div class="pw-wrap">
+        <input class="form-input" id="f_api_key" type="password" placeholder="OAuth2 Client ID" value="${esc(state.wizardData.api_key||'')}">
+        <button class="pw-eye" onclick="togglePw('f_api_key',this)">&#128065;</button>
+      </div>
+      <div class="form-hint">Found in Falcon → API Clients & Keys → Create New Client</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Client Secret <span>*</span></label>
+      <div class="pw-wrap">
+        <input class="form-input" id="f_secret_key" type="password" placeholder="OAuth2 Client Secret" value="${esc(state.wizardData.secret_key||'')}">
+        <button class="pw-eye" onclick="togglePw('f_secret_key',this)">&#128065;</button>
+      </div>
+      <div class="form-hint">Generated at client creation time — save it securely</div>
+    </div>
+    ` : `
+    <div class="form-group">
+      <label class="form-label">Username <span>*</span></label>
+      <input class="form-input" id="f_username" placeholder="Scanner username" value="${esc(state.wizardData.username||'')}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Password <span>*</span></label>
+      <div class="pw-wrap">
+        <input class="form-input" id="f_password" type="password" placeholder="Scanner password" value="${esc(state.wizardData.password||'')}">
+        <button class="pw-eye" onclick="togglePw('f_password',this)">&#128065;</button>
+      </div>
+    </div>
+    `}
+  </div>`;
+}
+
+async function scannerNext() {
+  const step = state.wizardStep;
+
+  if (step === 1) {
+    if (!state.wizardData.type) { alert('Please select a scanner type.'); return; }
+    state.wizardStep = 2; renderStepBar(); renderWizardStep();
+  }
+  else if (step === 2) {
+    const label = document.getElementById('f_label')?.value.trim();
+    const client = document.getElementById('f_client')?.value;
+    if (!label || !client) { alert('Label and client are required.'); return; }
+    state.wizardData.label     = label;
+    state.wizardData.client_id = client;
+    state.wizardData.host_url  = document.getElementById('f_host')?.value || '';
+    state.wizardData.port      = parseInt(document.getElementById('f_port')?.value) || null;
+    state.wizardData.api_key   = document.getElementById('f_api_key')?.value || '';
+    state.wizardData.secret_key = document.getElementById('f_secret_key')?.value || '';
+    state.wizardData.username  = document.getElementById('f_username')?.value || '';
+    state.wizardData.password  = document.getElementById('f_password')?.value || '';
+    state.wizardStep = 3; renderStepBar(); renderWizardStep();
+    runScannerTest();
+  }
+  else if (step === 3) {
+    if (!state.testResults?.success) { alert('Connection test must pass before continuing.'); return; }
+    state.wizardStep = 4; renderStepBar(); renderWizardStep();
+  }
+  else if (step === 4) {
+    gatherScannerFilters();
+    state.wizardStep = 5; renderStepBar(); renderWizardStep();
+  }
+  else if (step === 5) {
+    gatherFieldMapping();
+    // Validate required fields mapped
+    const fm = state.wizardData.fieldMapping || {};
+    const vals = Object.values(fm);
+    if (!vals.includes('title') || !vals.includes('severity')) {
+      if (!confirm('Required fields "title" and "severity" are not mapped. Continue anyway?')) return;
+    }
+    state.wizardStep = 6; renderStepBar(); renderWizardStep();
+  }
+  else if (step === 6) {
+    await saveScanner();
+  }
+}
+
+async function runScannerTest() {
+  document.getElementById('wizardContent').innerHTML = `
+    <div class="test-spinner">
+      <div class="spinner-ring"></div>
+      <div>Testing connection to ${esc(SCANNER_TYPES[state.wizardData.type]?.label||state.wizardData.type)}...</div>
+      <div style="font-size:8px;color:var(--muted)">Authenticating · Checking permissions · Discovering assets</div>
+    </div>`;
+  document.getElementById('btnNext').disabled = true;
+
+  try {
+    const res = await fetch(`${API}/clients/${state.wizardData.client_id}/scanners/test`, {
+      method: 'POST', headers: authHdr(),
+      body: JSON.stringify({
+        scanner_type: state.wizardData.type,
+        host_url: state.wizardData.host_url,
+        port: state.wizardData.port,
+        api_key: state.wizardData.api_key,
+        secret_key: state.wizardData.secret_key,
+        username: state.wizardData.username,
+        password: state.wizardData.password,
+      })
+    });
+    const d = await res.json();
+    state.testResults = d;
+    renderScannerTestResults(d);
+  } catch(e) {
+    state.testResults = {success: false, error_message: String(e)};
+    renderScannerTestResults(state.testResults);
+  }
+}
+
+function renderScannerTestResults(d) {
+  const content = document.getElementById('wizardContent');
+  const next = document.getElementById('btnNext');
+  next.disabled = !d.success;
+
+  let html = `<div class="form-section-title">CONNECTION TEST RESULTS</div>`;
+  if (!d.success) {
+    html += `<div class="test-error">&#10008; ${esc(d.error_message || 'Connection failed')}</div>
+    <p style="font-size:9px;color:var(--muted);margin-bottom:16px">Fix the credentials in the previous step and try again.</p>`;
+  }
+  html += `<table class="test-results-table">
+    <tr><td>API Authentication</td><td><span class="test-check ${d.success?'pass':'fail'}">${d.success?'&#10003; PASS':'&#10008; FAIL'}</span></td></tr>
+    <tr><td>Permissions Check</td><td><span class="test-check ${d.success?'pass':'warn'}">${d.success?'&#10003; PASS':'— N/A'}</span></td></tr>
+    <tr><td>Assets Discovered</td><td>${d.asset_count != null ? d.asset_count.toLocaleString() : '—'}</td></tr>
+    <tr><td>Vulnerabilities Accessible</td><td>${d.vuln_count != null ? d.vuln_count.toLocaleString() : '—'}</td></tr>
+    <tr><td>API Rate Limit</td><td>${d.rate_limit || 'Not reported'}</td></tr>
+  </table>`;
+  if (d.sample_fields?.length) {
+    html += `<div class="form-hint" style="margin-top:10px">Sample fields detected: ${d.sample_fields.slice(0,10).map(f=>`<code style="background:var(--bg3);padding:1px 4px">${esc(f)}</code>`).join(' ')}</div>`;
+  }
+  if (!d.success) {
+    html += `<br><button class="w-btn danger" onclick="() => { state.wizardStep=2; renderStepBar(); renderWizardStep(); }">&#8592; FIX CREDENTIALS</button>`;
+  }
+  content.innerHTML = html;
+}
+
+function renderScannerStep4() {
+  const wd = state.wizardData;
+  const sevs = ['CRITICAL','HIGH','MEDIUM','LOW','INFO'];
+  return `<div>
+    <div class="form-section-title">CONFIGURE PULL FILTERS</div>
+    <div class="form-group">
+      <label class="form-label">Severity Threshold <span>*</span></label>
+      <div class="sev-pills" id="sevPills">
+        ${sevs.map(s=>`<button class="sev-pill${(wd.severityFilter||[]).includes(s)?' on':''}" data-sev="${s}" onclick="toggleSev(this)">${s}</button>`).join('')}
+      </div>
+      <div class="form-hint">Select which severities to pull. At least one required.</div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Asset Tags / Groups to Include</label>
+        <input class="form-input" id="f_asset_tags" placeholder="tag1, tag2 (blank = all)" value="${esc(wd.assetTags||'')}">
+        <div class="form-hint">Comma-separated asset tags. Leave blank to include all assets.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Asset Exclusions</label>
+        <input class="form-input" id="f_asset_excl" placeholder="hostname1, 10.0.0.0/24" value="${esc(wd.assetExclusions||'')}">
+        <div class="form-hint">Comma-separated hostnames or CIDR ranges to exclude.</div>
+      </div>
+    </div>
+    <div class="toggle-row">
+      <div><div class="toggle-label">Only pull CVE-mapped findings</div><div class="toggle-sub">Exclude scanner-specific findings not linked to a CVE</div></div>
+      <div class="toggle${wd.cveOnly?' on':''}" id="t_cve_only" onclick="this.classList.toggle('on')"></div>
+    </div>
+    <div class="form-group" style="margin-top:12px">
+      <label class="form-label">Auto-create remediation items</label>
+      <select class="form-select" id="f_auto_rem">
+        <option value="critical_high"${wd.autoRemediate==='critical_high'?' selected':''}>Yes — Critical and High only</option>
+        <option value="all"${wd.autoRemediate==='all'?' selected':''}>Yes — All severity levels</option>
+        <option value="no"${wd.autoRemediate==='no'?' selected':''}>No</option>
+      </select>
+    </div>
+    <div class="toggle-row">
+      <div><div class="toggle-label">Match findings to existing CVE feed items</div><div class="toggle-sub">Cross-reference findings against the ThreatPulse threat feed</div></div>
+      <div class="toggle${wd.matchCve?' on':''}" id="t_match_cve" onclick="this.classList.toggle('on')"></div>
+    </div>
+  </div>`;
+}
+
+window.toggleSev = function(btn) { btn.classList.toggle('on'); };
+
+function gatherScannerFilters() {
+  const pills = document.querySelectorAll('.sev-pill.on');
+  state.wizardData.severityFilter = Array.from(pills).map(p => p.dataset.sev);
+  state.wizardData.assetTags      = document.getElementById('f_asset_tags')?.value || '';
+  state.wizardData.assetExclusions = document.getElementById('f_asset_excl')?.value || '';
+  state.wizardData.cveOnly        = document.getElementById('t_cve_only')?.classList.contains('on') || false;
+  state.wizardData.autoRemediate  = document.getElementById('f_auto_rem')?.value || 'critical_high';
+  state.wizardData.matchCve       = document.getElementById('t_match_cve')?.classList.contains('on') || false;
+}
+
+function renderScannerStep5() {
+  const sampleFields = state.testResults?.sample_fields || [];
+  const existingMapping = state.wizardData.fieldMapping || {};
+  const defaultMap = {
+    title: 'title', severity: 'severity', cvss: 'cvss',
+    hostname: 'hostname', ip_address: 'ip_address', ip: 'ip_address',
+    cve_id: 'cve_id', plugin_id: 'plugin_id',
+    description: 'description', solution: 'solution',
+    vendor: 'vendor', product: 'product',
+  };
+  const fields = sampleFields.length ? sampleFields
+    : ['title','severity','cvss','hostname','ip_address','cve_id','plugin_id','description','solution'];
+
+  const rows = fields.map(src => {
+    const mapped = existingMapping[src] || defaultMap[src] || '';
+    const isReq = ['title','severity'].includes(mapped);
+    return `<tr>
+      <td>${esc(src)}</td>
+      <td class="fmap-arrow">→</td>
+      <td>
+        <select class="fmap-sel" data-src="${esc(src)}" id="fm_${esc(src)}">
+          <option value="">— unmapped —</option>
+          ${PF_FIELDS.map(f=>`<option value="${f}"${mapped===f?' selected':''}>${f}${['title','severity'].includes(f)?' *':''}</option>`).join('')}
+        </select>
+      </td>
+      <td>${mapped?`<span class="fmap-badge ok">MAPPED</span>`:`<span class="fmap-unmapped">UNMAPPED</span>`}</td>
+    </tr>`;
+  }).join('');
+
+  return `<div>
+    <div class="form-section-title">FIELD MAPPING</div>
+    <div class="note-box">Fields marked * are required for ThreatPulse integration. Auto-detected from test results where possible.</div>
+    <table class="fmap-edit-table">
+      <thead><tr><th>Source Field</th><th></th><th>PhantomFeed Field</th><th>Status</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+function gatherFieldMapping() {
+  const sels = document.querySelectorAll('.fmap-sel');
+  const mapping = {};
+  sels.forEach(s => { if (s.value) mapping[s.dataset.src] = s.value; });
+  state.wizardData.fieldMapping = mapping;
+}
+
+function renderScannerStep6() {
+  const wd = state.wizardData;
+  return `<div>
+    <div class="form-section-title">SCHEDULE</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Pull Interval <span>*</span></label>
+        <select class="form-select" id="f_interval">
+          <option value="0.25"${wd.intervalHours==0.25?' selected':''}>Every 15 minutes</option>
+          <option value="1"${wd.intervalHours==1?' selected':''}>Every 1 hour</option>
+          <option value="24"${!wd.intervalHours||wd.intervalHours==24?' selected':''}>Every 24 hours</option>
+          <option value="72"${wd.intervalHours==72?' selected':''}>Every 72 hours</option>
+          <option value="168"${wd.intervalHours==168?' selected':''}>Every 7 days</option>
+          <option value="0">Manual only</option>
+        </select>
+        <div class="form-hint" style="color:var(--amber)">FedRAMP 20x KSI-VUL-01: minimum 72h interval required for compliance evidence.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Pull Start Time (UTC)</label>
+        <input type="time" class="form-input" id="f_start_time" value="${wd.startTime||'02:00'}">
+      </div>
+    </div>
+    <div class="toggle-row">
+      <div><div class="toggle-label">Pull immediately on save</div><div class="toggle-sub">Run the first pull right after saving this configuration</div></div>
+      <div class="toggle${wd.pullOnSave?' on':'on'}" id="t_pull_now" onclick="this.classList.toggle('on')"></div>
+    </div>
+    <div class="form-group" style="margin-top:12px">
+      <label class="form-label">Retry on failure</label>
+      <select class="form-select" id="f_retry">
+        <option value="3x10">3 attempts, 10 min apart</option>
+        <option value="1">1 retry</option>
+        <option value="no">No retry</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Alert email on pull failure (optional)</label>
+      <input type="email" class="form-input" id="f_alert_email" placeholder="ops@example.com" value="${esc(wd.alertEmail||'')}">
+    </div>
+  </div>`;
+}
+
+async function saveScanner() {
+  const btn = document.getElementById('btnNext');
+  btn.disabled = true; btn.textContent = 'SAVING...';
+
+  const intervalHours = parseFloat(document.getElementById('f_interval')?.value) || 24;
+  const pullOnSave = document.getElementById('t_pull_now')?.classList.contains('on') || false;
+  const alertEmail = document.getElementById('f_alert_email')?.value || '';
+
+  const wd = state.wizardData;
+  const body = {
+    scanner_type: wd.type,
+    label: wd.label,
+    host_url: wd.host_url || '',
+    api_key: wd.api_key || '',
+    secret_key: wd.secret_key || '',
+    username: wd.username || '',
+    password: wd.password || '',
+    poll_interval_hours: Math.max(1, Math.round(intervalHours)),
+    pull_on_save: pullOnSave,
+    extra_config: {
+      severity_filter: wd.severityFilter || ['CRITICAL','HIGH','MEDIUM'],
+      asset_tags: wd.assetTags || '',
+      asset_exclusions: wd.assetExclusions || '',
+      cve_only: !!wd.cveOnly,
+      auto_remediate: wd.autoRemediate || 'critical_high',
+      match_cve_feed: !!wd.matchCve,
+      field_mapping: wd.fieldMapping || {},
+      start_time: document.getElementById('f_start_time')?.value || '02:00',
+      retry_on_failure: document.getElementById('f_retry')?.value || '3x10',
+      alert_email: alertEmail,
+    },
+  };
+
+  try {
+    const res = await fetch(`${API}/clients/${wd.client_id}/scanners`, {
+      method: 'POST', headers: authHdr(), body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(`Failed to save: ${err.detail || res.status}`);
+      btn.disabled = false; btn.textContent = 'SAVE ✓'; return;
+    }
+    const saved = await res.json();
+    await loadSidebar();
+    selectIntegration(saved.id, 'scanner');
+  } catch(e) {
+    alert('Save failed: ' + e.message);
+    btn.disabled = false; btn.textContent = 'SAVE ✓';
+  }
+}
+
+// ── SIEM steps ────────────────────────────────────────────────────────────────
+
+function renderSiemStep1() {
+  return `<div>
+    <div class="form-section-title">CHOOSE SIEM TYPE</div>
+    <div class="type-grid" style="grid-template-columns:repeat(3,1fr)">
+      ${Object.entries(SIEM_TYPES).map(([id,t]) => `
+        <div class="type-card${state.wizardData.type===id?' selected':''}" onclick="selectSiemType('${id}')">
+          <div class="tc-ico">${t.icon}</div>
+          <div class="tc-name">${esc(t.label)}</div>
+          <div class="tc-auth">${esc(t.auth)}</div>
+          <div class="tc-desc">${esc(t.desc)}</div>
+        </div>`).join('')}
+    </div>
+    <div class="type-info${state.wizardData.type?` show`:''}" id="typeInfoBox">
+      ${state.wizardData.type ? esc(SIEM_TYPES[state.wizardData.type].info) : ''}
+    </div>
+  </div>`;
+}
+
+window.selectSiemType = function(id) {
+  state.wizardData.type = id;
+  if (!state.wizardData.query) {
+    state.wizardData.query = SIEM_TYPES[id]?.defaultQuery || '';
+  }
+  renderWizardStep();
+};
+
+function renderSiemStep2() {
+  const t = state.wizardData.type;
+  const isSentinel = t === 'sentinel';
+  const isChronicle = t === 'chronicle';
+  const isQRadar = t === 'qradar';
+  const isSplunk = t === 'splunk';
+  const isElastic = t === 'elastic';
+
+  const clientOpts = state.clients.map(c =>
+    `<option value="${esc(c.id)}"${state.wizardData.client_id===c.id?' selected':''}>${esc(c.name)}</option>`
+  ).join('');
+
+  return `<div>
+    <div class="form-section-title">CONNECTION SETTINGS</div>
+    ${isSentinel ? `<div class="note-box">Register an app in Azure AD → App Registrations with "Log Analytics Reader" role on the Sentinel workspace. Use the app's client ID, tenant ID, and a generated client secret.</div>` : ''}
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Integration Label <span>*</span></label>
+        <input class="form-input" id="f_label" placeholder="e.g. Prod Splunk" value="${esc(state.wizardData.label||'')}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Client <span>*</span></label>
+        <select class="form-select" id="f_client"><option value="">— Select client —</option>${clientOpts}</select>
+      </div>
+    </div>
+    ${isChronicle ? `
+    <div class="form-group">
+      <label class="form-label">Service Account JSON <span>*</span></label>
+      <textarea class="form-textarea" id="f_api_key" placeholder='Paste the full contents of your Google service account JSON key file...' rows="6">${esc(state.wizardData.api_key||'')}</textarea>
+      <div class="form-hint">Download from Google Cloud → IAM → Service Accounts → Keys → Add Key → JSON</div>
+    </div>
+    ` : isSentinel ? `
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Tenant ID <span>*</span></label>
+        <input class="form-input" id="f_host" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="${esc(state.wizardData.host_url||'')}">
+        <div class="form-hint">Azure AD → Properties → Tenant ID</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Workspace ID <span>*</span></label>
+        <input class="form-input" id="f_workspace_id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="${esc(state.wizardData.workspace_id||'')}">
+        <div class="form-hint">Log Analytics Workspace → Overview → Workspace ID</div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Client ID <span>*</span></label>
+        <input class="form-input" id="f_username" placeholder="Application (client) ID" value="${esc(state.wizardData.username||'')}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Client Secret <span>*</span></label>
+        <div class="pw-wrap">
+          <input class="form-input" id="f_password" type="password" placeholder="Client secret value" value="${esc(state.wizardData.password||'')}">
+          <button class="pw-eye" onclick="togglePw('f_password',this)">&#128065;</button>
+        </div>
+        <div class="form-hint">Azure AD → App Registrations → Certificates & Secrets</div>
+      </div>
+    </div>
+    ` : isQRadar ? `
+    <div class="form-group">
+      <label class="form-label">Host URL <span>*</span></label>
+      <input class="form-input" id="f_host" placeholder="https://qradar.example.com" value="${esc(state.wizardData.host_url||'')}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">SEC API Token <span>*</span></label>
+      <div class="pw-wrap">
+        <input class="form-input" id="f_api_key" type="password" placeholder="SEC token from Authorized Services" value="${esc(state.wizardData.api_key||'')}">
+        <button class="pw-eye" onclick="togglePw('f_api_key',this)">&#128065;</button>
+      </div>
+      <div class="form-hint">QRadar → Admin → Authorized Services → Add Authorized Service</div>
+    </div>
+    ` : isSplunk ? `
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Host <span>*</span></label>
+        <input class="form-input" id="f_host" placeholder="https://splunk.example.com" value="${esc(state.wizardData.host_url||'')}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Management Port</label>
+        <input type="number" class="form-input" id="f_port" value="${state.wizardData.port||8089}">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Auth Token</label>
+      <div class="pw-wrap">
+        <input class="form-input" id="f_api_key" type="password" placeholder="Splunk auth token (or use user/pass below)" value="${esc(state.wizardData.api_key||'')}">
+        <button class="pw-eye" onclick="togglePw('f_api_key',this)">&#128065;</button>
+      </div>
+      <div class="form-hint">Splunk → Settings → Tokens → New Token. Leave blank to use username/password.</div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Username (alt)</label>
+        <input class="form-input" id="f_username" placeholder="admin" value="${esc(state.wizardData.username||'')}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password (alt)</label>
+        <div class="pw-wrap">
+          <input class="form-input" id="f_password" type="password" value="${esc(state.wizardData.password||'')}">
+          <button class="pw-eye" onclick="togglePw('f_password',this)">&#128065;</button>
+        </div>
+      </div>
+    </div>
+    ` : `
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Host <span>*</span></label>
+        <input class="form-input" id="f_host" placeholder="https://elastic.example.com" value="${esc(state.wizardData.host_url||'')}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Port</label>
+        <input type="number" class="form-input" id="f_port" value="${state.wizardData.port||9200}">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">API Key <span>*</span></label>
+      <div class="pw-wrap">
+        <input class="form-input" id="f_api_key" type="password" placeholder="base64(id:api_key)" value="${esc(state.wizardData.api_key||'')}">
+        <button class="pw-eye" onclick="togglePw('f_api_key',this)">&#128065;</button>
+      </div>
+      <div class="form-hint">Kibana → Stack Management → API Keys → Create API Key. Encode as base64(id:key_value).</div>
+    </div>
+    `}
+  </div>`;
+}
+
+function renderSiemStep3() {
+  const t = state.wizardData.type;
+  const info = SIEM_TYPES[t] || {};
+  const lang = {splunk:'SPL',sentinel:'KQL',qradar:'AQL',elastic:'JSON DSL',chronicle:'UDM'}[t] || 'Query';
+  return `<div>
+    <div class="form-section-title">BUILD QUERY</div>
+    <div class="note-box">Enter the query to run against ${esc(info.label||t)} on each pull. The default below matches high/critical security events in the last 24 hours.</div>
+    <div class="form-group">
+      <label class="form-label">${lang} Query <span>*</span></label>
+      <div class="qeditor-wrap">
+        <textarea class="qeditor" id="f_query" rows="8">${esc(state.wizardData.query || info.defaultQuery || '')}</textarea>
+        <span class="qeditor-lang">${lang}</span>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Lookback Window</label>
+        <select class="form-select" id="f_lookback">
+          <option value="1h">1 hour</option>
+          <option value="4h">4 hours</option>
+          <option value="24h"${(state.wizardData.lookback||'24h')==='24h'?' selected':''}>24 hours</option>
+          <option value="48h">48 hours</option>
+          <option value="7d">7 days</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Max Results Per Pull</label>
+        <select class="form-select" id="f_max_results">
+          <option value="100">100</option>
+          <option value="500">500</option>
+          <option value="1000"${(state.wizardData.maxResults||1000)===1000?' selected':''}>1,000</option>
+          <option value="5000">5,000</option>
+        </select>
+      </div>
+    </div>
+    <div class="toggle-row">
+      <div><div class="toggle-label">Include raw event JSON in items</div><div class="toggle-sub">Stores full event payload — increases storage requirements</div></div>
+      <div class="toggle" id="t_raw_json" onclick="this.classList.toggle('on')"></div>
+    </div>
+  </div>`;
+}
+
+function renderSiemStep4Loading() {
+  document.getElementById('btnNext').disabled = true;
+  setTimeout(runSiemTest, 100);
+  return `<div class="test-spinner"><div class="spinner-ring"></div><div>Running test query...</div><div style="font-size:8px;color:var(--muted)">Authenticating · Executing query · Fetching sample events</div></div>`;
+}
+
+async function runSiemTest() {
+  const wd = state.wizardData;
+  try {
+    const res = await fetch(`${API}/clients/${wd.client_id}/siems/test`, {
+      method: 'POST', headers: authHdr(),
+      body: JSON.stringify({
+        siem_type: wd.type,
+        host_url: wd.host_url || '',
+        port: wd.port,
+        api_key: wd.api_key || '',
+        secret_key: wd.secret_key || '',
+        username: wd.username || '',
+        password: wd.password || '',
+        query: wd.query || '',
+        lookback_window: wd.lookback || '24h',
+        max_results: wd.maxResults || 1000,
+        extra_config: wd.workspace_id ? {workspace_id: wd.workspace_id} : {},
+      })
+    });
+    const d = await res.json();
+    state.testResults = d;
+    renderSiemTestResults(d);
+  } catch(e) {
+    state.testResults = {success: false, error: String(e)};
+    renderSiemTestResults(state.testResults);
+  }
+}
+
+function renderSiemTestResults(d) {
+  const next = document.getElementById('btnNext');
+  next.disabled = !d.success;
+
+  let html = `<div class="form-section-title">QUERY TEST RESULTS</div>`;
+  if (!d.success) {
+    html += `<div class="test-error">&#10008; ${esc(d.error || 'Query failed')}</div>
+    <div class="form-group" style="margin-top:10px">
+      <label class="form-label">Edit query inline and retry:</label>
+      <textarea class="qeditor" id="f_query_retry" rows="6">${esc(state.wizardData.query||'')}</textarea>
+      <br><button class="w-btn" onclick="retryWithEditedQuery()" style="margin-top:8px">RE-TEST QUERY</button>
+    </div>`;
+  } else {
+    html += `<table class="test-results-table">
+      <tr><td>Authentication</td><td><span class="test-check pass">&#10003; PASS</span></td></tr>
+      <tr><td>Events in last 24h</td><td>${(d.results_count_24h||0).toLocaleString()}</td></tr>
+      <tr><td>Fields detected</td><td>${(d.detected_fields||[]).slice(0,8).map(f=>`<code style="background:var(--bg3);padding:1px 4px;margin-right:3px">${esc(f)}</code>`).join('')}</td></tr>
+    </table>`;
+    if (d.sample_events?.length) {
+      html += `<div style="margin-top:14px"><div class="form-section-title" style="margin-bottom:8px">SAMPLE EVENTS (${d.sample_events.length})</div>`;
+      d.sample_events.forEach((ev, i) => {
+        html += `<div class="preview-event">${esc(JSON.stringify(ev, null, 2))}</div>`;
+      });
+      html += '</div>';
+    }
+  }
+  document.getElementById('wizardContent').innerHTML = html;
+}
+
+window.retryWithEditedQuery = async function() {
+  state.wizardData.query = document.getElementById('f_query_retry')?.value || state.wizardData.query;
+  document.getElementById('wizardContent').innerHTML = `<div class="test-spinner"><div class="spinner-ring"></div><div>Retrying...</div></div>`;
+  await runSiemTest();
+};
+
+function renderSiemStep5() {
+  const sampleFields = state.testResults?.detected_fields || [];
+  const existingMapping = state.wizardData.fieldMapping || {};
+  const defaultMap = {
+    title:'title', AlertName:'title', name:'title', signature:'title',
+    severity:'severity', AlertSeverity:'severity', alert_severity:'severity',
+    hostname:'hostname', host:'hostname', src_ip:'ip_address',
+    cve_id:'cve_id', CVE:'cve_id',
+    description:'description', message:'description',
+  };
+  const fields = sampleFields.length ? sampleFields
+    : ['title','severity','hostname','src_ip','description','cve_id'];
+
+  const rows = fields.map(src => {
+    const mapped = existingMapping[src] || defaultMap[src] || '';
+    return `<tr>
+      <td>${esc(src)}</td>
+      <td class="fmap-arrow">→</td>
+      <td style="font-size:8px;color:var(--muted);max-width:100px;overflow:hidden;text-overflow:ellipsis"></td>
+      <td>
+        <select class="fmap-sel" data-src="${esc(src)}" id="fm_${esc(src)}">
+          <option value="">— unmapped —</option>
+          ${PF_FIELDS.map(f=>`<option value="${f}"${mapped===f?' selected':''}>${f}${['title','severity'].includes(f)?' *':''}</option>`).join('')}
+        </select>
+      </td>
+    </tr>`;
+  }).join('');
+
+  return `<div>
+    <div class="form-section-title">FIELD MAPPING</div>
+    <div class="note-box">Map SIEM event fields to ThreatPulse schema. Fields marked * are required.</div>
+    <table class="fmap-edit-table">
+      <thead><tr><th>SIEM Field</th><th></th><th>Sample Value</th><th>PhantomFeed Field</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+function renderSiemStep6() {
+  const wd = state.wizardData;
+  return `<div>
+    <div class="form-section-title">SCHEDULE</div>
+    <div class="note-box" style="border-color:rgba(0,212,170,.3)">FedRAMP 20x KSI-IR-01: 15-minute pulls produce the strongest continuous monitoring evidence for active incident detection.</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Pull Interval <span>*</span></label>
+        <select class="form-select" id="f_interval">
+          <option value="0.25"${wd.intervalHours==0.25?' selected':''}>Every 15 minutes (recommended)</option>
+          <option value="1"${wd.intervalHours==1?' selected':''}>Every 1 hour</option>
+          <option value="24">Every 24 hours</option>
+          <option value="72">Every 72 hours</option>
+          <option value="0">Manual only</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Pull Start Time (UTC)</label>
+        <input type="time" class="form-input" id="f_start_time" value="${wd.startTime||'00:00'}">
+      </div>
+    </div>
+    <div class="toggle-row">
+      <div><div class="toggle-label">Pull immediately on save</div><div class="toggle-sub">Run the first query right after saving</div></div>
+      <div class="toggle on" id="t_pull_now" onclick="this.classList.toggle('on')"></div>
+    </div>
+    <div class="form-group" style="margin-top:12px">
+      <label class="form-label">Retry on failure</label>
+      <select class="form-select" id="f_retry">
+        <option value="3x10">3 attempts, 10 min apart</option>
+        <option value="1">1 retry</option>
+        <option value="no">No retry</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Alert email on pull failure (optional)</label>
+      <input type="email" class="form-input" id="f_alert_email" placeholder="ops@example.com" value="${esc(wd.alertEmail||'')}">
+    </div>
+  </div>`;
+}
+
+async function siemNext() {
+  const step = state.wizardStep;
+
+  if (step === 1) {
+    if (!state.wizardData.type) { alert('Please select a SIEM type.'); return; }
+    state.wizardStep = 2; renderStepBar(); renderWizardStep();
+  }
+  else if (step === 2) {
+    const label = document.getElementById('f_label')?.value.trim();
+    const client = document.getElementById('f_client')?.value;
+    if (!label || !client) { alert('Label and client are required.'); return; }
+    state.wizardData.label      = label;
+    state.wizardData.client_id  = client;
+    state.wizardData.host_url   = document.getElementById('f_host')?.value || '';
+    state.wizardData.port       = parseInt(document.getElementById('f_port')?.value) || null;
+    state.wizardData.api_key    = document.getElementById('f_api_key')?.value || '';
+    state.wizardData.secret_key = document.getElementById('f_secret_key')?.value || '';
+    state.wizardData.username   = document.getElementById('f_username')?.value || '';
+    state.wizardData.password   = document.getElementById('f_password')?.value || '';
+    state.wizardData.workspace_id = document.getElementById('f_workspace_id')?.value || '';
+    state.wizardStep = 3; renderStepBar(); renderWizardStep();
+  }
+  else if (step === 3) {
+    const q = document.getElementById('f_query')?.value.trim();
+    if (!q) { alert('A query is required.'); return; }
+    state.wizardData.query   = q;
+    state.wizardData.lookback = document.getElementById('f_lookback')?.value || '24h';
+    state.wizardData.maxResults = parseInt(document.getElementById('f_max_results')?.value) || 1000;
+    state.wizardData.includeRaw = document.getElementById('t_raw_json')?.classList.contains('on') || false;
+    state.wizardStep = 4; renderStepBar(); renderWizardStep();
+  }
+  else if (step === 4) {
+    if (!state.testResults?.success) { alert('Connection test must pass before continuing.'); return; }
+    state.wizardStep = 5; renderStepBar(); renderWizardStep();
+  }
+  else if (step === 5) {
+    gatherFieldMapping();
+    state.wizardStep = 6; renderStepBar(); renderWizardStep();
+  }
+  else if (step === 6) {
+    await saveSiem();
+  }
+}
+
+async function saveSiem() {
+  const btn = document.getElementById('btnNext');
+  btn.disabled = true; btn.textContent = 'SAVING...';
+
+  const intervalHours = parseFloat(document.getElementById('f_interval')?.value) || 0.25;
+  const pullOnSave = document.getElementById('t_pull_now')?.classList.contains('on') || false;
+  const wd = state.wizardData;
+
+  const body = {
+    siem_type: wd.type,
+    label: wd.label,
+    host_url: wd.host_url || '',
+    api_key: wd.api_key || '',
+    secret_key: wd.secret_key || '',
+    username: wd.username || '',
+    password: wd.password || '',
+    poll_interval_hours: Math.max(1, Math.round(intervalHours * 60) / 60 === 0.25 ? 1 : Math.round(intervalHours)),
+    pull_on_save: pullOnSave,
+    extra_config: {
+      query: wd.query || '',
+      lookback_window: wd.lookback || '24h',
+      max_results: wd.maxResults || 1000,
+      include_raw: !!wd.includeRaw,
+      workspace_id: wd.workspace_id || '',
+      field_mapping: wd.fieldMapping || {},
+      start_time: document.getElementById('f_start_time')?.value || '00:00',
+      retry_on_failure: document.getElementById('f_retry')?.value || '3x10',
+      alert_email: document.getElementById('f_alert_email')?.value || '',
+    },
+  };
+
+  try {
+    const res = await fetch(`${API}/clients/${wd.client_id}/siems`, {
+      method: 'POST', headers: authHdr(), body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(`Failed to save: ${err.detail || res.status}`);
+      btn.disabled = false; btn.textContent = 'SAVE ✓'; return;
+    }
+    const saved = await res.json();
+    await loadSidebar();
+    selectIntegration(saved.id, 'siem');
+  } catch(e) {
+    alert('Save failed: ' + e.message);
+    btn.disabled = false; btn.textContent = 'SAVE ✓';
+  }
+}
+
+// ── Shared helpers ────────────────────────────────────────────────────────────
+
+function showView(v) {
+  state.view = v;
+  document.getElementById('viewEmpty').style.display  = v === 'empty'  ? '' : 'none';
+  document.getElementById('viewDetail').style.display = v === 'detail' ? '' : 'none';
+  document.getElementById('viewWizard').style.display = v === 'wizard' ? '' : 'none';
+}
+
+window.togglePw = function(id, btn) {
+  const inp = document.getElementById(id);
+  if (!inp) return;
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  btn.style.opacity = inp.type === 'text' ? '1' : '.5';
+};
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+showView('empty');
+loadSidebar();
+</script>
+
+<script src="/nav-component.js"></script>
+</body>
+</html>

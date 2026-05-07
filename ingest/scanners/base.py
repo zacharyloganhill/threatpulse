@@ -43,16 +43,23 @@ class BaseScannerFetcher(ABC):
         try:
             findings = await self.fetch()
             new_count = 0
+            asset_ids: set = set()
             for f in findings:
                 f["client_id"] = self.client_id
                 f["scanner_id"] = self.scanner_id
                 f["scanner_type"] = self.scanner_type
                 if await db.upsert_scan_finding(f):
                     new_count += 1
+                if f.get("hostname") or f.get("ip_address"):
+                    asset_ids.add(f.get("hostname") or f.get("ip_address"))
             await db.update_scanner_config(
                 self.scanner_id,
                 last_polled=now,
                 last_status=f"ok:{len(findings)} findings ({new_count} new)",
+            )
+            await db.add_pull_record(
+                self.scanner_id, "scanner", self.client_id, "ok",
+                finding_count=len(findings), asset_count=len(asset_ids),
             )
             logger.info("%s scanner %s: %d findings, %d new",
                         self.scanner_type, self.scanner_id, len(findings), new_count)
@@ -63,6 +70,10 @@ class BaseScannerFetcher(ABC):
                 self.scanner_id,
                 last_polled=now,
                 last_status=f"error:{exc}",
+            )
+            await db.add_pull_record(
+                self.scanner_id, "scanner", self.client_id, "error",
+                error_message=str(exc)[:500],
             )
             return 0
 

@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ThreatPulse — Client Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080a0d;--bg2:#0c0f14;--bg3:#111620;--bg4:#161c28;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#c9d4e3;--muted:#4e5d72;--dim:#1e2836;
+  --teal:#00d4aa;--teal-d:rgba(0,212,170,0.08);--teal-m:rgba(0,212,170,0.15);
+  --red:#f0595a;--red-d:rgba(240,89,90,0.1);
+  --amber:#e8a530;--amber-d:rgba(232,165,48,0.1);
+  --blue:#4d9de0;--blue-d:rgba(77,157,224,0.1);
+  --purple:#9b8ef5;--green:#3dd68c;
+  --mono:'JetBrains Mono',monospace;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:12px}
+::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#1e2836;border-radius:2px}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px)}
+
+.shell{display:flex;flex-direction:column;height:100vh}
+
+/* Topbar */
+.topbar{display:flex;align-items:center;gap:12px;padding:0 20px;height:44px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
+
+/* Controls bar */
+.controls{display:flex;align-items:center;gap:10px;padding:0 18px;height:40px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
+.client-name{font-size:10px;font-weight:600;letter-spacing:1px;color:var(--text)}
+.auth-badge{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;font-size:7px;letter-spacing:1.5px;font-weight:600}
+.auth-badge.authorized{background:rgba(61,214,140,.1);border:1px solid var(--green);color:var(--green)}
+.auth-badge.conditional{background:rgba(232,165,48,.1);border:1px solid var(--amber);color:var(--amber)}
+.auth-badge.not-authorized{background:rgba(240,89,90,.1);border:1px solid var(--red);color:var(--red)}
+.auth-badge.unknown{background:rgba(78,93,114,.1);border:1px solid var(--muted);color:var(--muted)}
+.ctrl-sep{width:1px;height:20px;background:var(--border)}
+.spacer{flex:1}
+.btn{font-family:var(--mono);font-size:8px;letter-spacing:1px;padding:4px 10px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:all .12s}
+.btn:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-d)}
+.btn.primary{border-color:var(--teal);color:var(--teal);background:var(--teal-d)}
+.btn.primary:hover{background:var(--teal-m)}
+
+/* Stat chips */
+.stat-row{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+.stat-chip{display:flex;flex-direction:column;gap:2px;padding:8px 18px;background:var(--bg2);border-right:1px solid var(--border);flex:1;min-width:90px}
+.stat-chip:last-child{border-right:none}
+.stat-label{font-size:7px;letter-spacing:2px;color:var(--muted);text-transform:uppercase}
+.stat-val{font-size:18px;font-weight:700;color:var(--text)}
+.stat-val.cr{color:var(--red)}.stat-val.hi{color:var(--amber)}.stat-val.me{color:var(--blue)}.stat-val.te{color:var(--teal)}.stat-val.gr{color:var(--green)}.stat-val.pu{color:var(--purple)}
+
+/* Main grid */
+.main-grid{display:grid;grid-template-columns:1fr 350px;flex:1;overflow:hidden}
+
+/* ── Feed panel ── */
+.feed-panel{display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border)}
+.feed-header{padding:7px 12px;background:var(--bg);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;flex-shrink:0}
+.search-wrap{flex:1;position:relative}
+.sico{position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:11px;pointer-events:none}
+.srch{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:10px;padding:5px 8px 5px 24px;outline:none;transition:border-color .15s}
+.srch::placeholder{color:var(--muted)}
+.srch:focus{border-color:var(--teal);background:var(--bg4)}
+.feed-filters{display:flex;gap:4px;padding:6px 12px;border-bottom:1px solid var(--border);background:var(--bg);flex-shrink:0;align-items:center}
+.filt-btn{font-family:var(--mono);font-size:8px;letter-spacing:.5px;padding:3px 8px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:all .12s}
+.filt-btn:hover{border-color:var(--border2);color:var(--text)}
+.filt-btn.on{border-color:var(--teal);color:var(--teal);background:var(--teal-d)}
+.filt-btn.cr.on{border-color:var(--red);color:var(--red);background:var(--red-d)}
+.filt-btn.hi.on{border-color:var(--amber);color:var(--amber);background:var(--amber-d)}
+.filt-btn.me.on{border-color:var(--blue);color:var(--blue);background:var(--blue-d)}
+.feed-count{font-size:8px;color:var(--muted);margin-left:auto}
+.feed-list{flex:1;overflow-y:auto}
+
+/* Feed items */
+.fitem{padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s;border-left:3px solid transparent}
+.fitem:hover{background:rgba(255,255,255,.02)}
+.fitem.sel{background:var(--teal-d);border-left-color:var(--teal)}
+.fitem.rd{opacity:.5}
+.fitem-row1{display:flex;align-items:flex-start;gap:6px;margin-bottom:4px}
+.sev{font-size:7px;letter-spacing:.5px;padding:2px 5px;border:1px solid;flex-shrink:0;margin-top:1px;font-weight:600}
+.sev.CRITICAL{border-color:rgba(240,89,90,.5);color:var(--red)}
+.sev.HIGH{border-color:rgba(232,165,48,.5);color:var(--amber)}
+.sev.MEDIUM{border-color:rgba(77,157,224,.5);color:var(--blue)}
+.sev.LOW{border-color:var(--border);color:var(--muted)}
+.sev.INFO{border-color:rgba(155,142,245,.4);color:var(--purple)}
+.inew{font-size:7px;padding:2px 4px;background:var(--teal);color:#000;font-weight:700;letter-spacing:.5px;flex-shrink:0;margin-top:2px}
+.ititle{font-size:10px;color:var(--text);line-height:1.5;flex:1}
+.fitem-row2{display:flex;gap:7px;font-size:8px;color:var(--muted)}
+.fitem-expand{margin-top:8px;padding:10px;background:var(--bg3);border:1px solid var(--border);font-size:9px;color:var(--muted);line-height:1.7;display:none}
+.fitem-expand.open{display:block}
+.exp-row{display:flex;gap:6px;margin-bottom:3px}
+.exp-key{color:var(--muted);flex-shrink:0;width:72px;font-size:8px}
+.exp-val{color:var(--text);word-break:break-word;flex:1}
+.alink{color:var(--teal);text-decoration:none;word-break:break-all}
+.alink:hover{color:#00ffcc}
+.load-more{display:block;width:100%;padding:10px;font-family:var(--mono);font-size:8px;letter-spacing:1px;background:transparent;border:none;border-top:1px solid var(--border);color:var(--muted);cursor:pointer;transition:all .12s;text-align:center}
+.load-more:hover{color:var(--teal);background:var(--teal-d)}
+.empty-feed{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;color:var(--muted);gap:10px;text-align:center;font-size:9px}
+.empty-ico{font-size:22px;color:var(--dim)}
+
+/* ── Right panel ── */
+.right-panel{display:flex;flex-direction:column;overflow:hidden;background:var(--bg2)}
+.tab-bar{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+.tab-btn{flex:1;font-family:var(--mono);font-size:8px;letter-spacing:1.5px;padding:10px 0;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--muted);cursor:pointer;transition:all .12s;text-transform:uppercase}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.on{color:var(--teal);border-bottom-color:var(--teal)}
+.tab-content{flex:1;overflow-y:auto}
+.panel-hdr{padding:8px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;font-size:8px;color:var(--muted);letter-spacing:.5px;flex-shrink:0}
+.panel-badge{font-size:7px;padding:1px 6px;border:1px solid rgba(240,89,90,.4);color:var(--red)}
+.panel-badge.ok{border-color:rgba(61,214,140,.4);color:var(--green)}
+
+/* KSI list */
+.ksi-item{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);font-size:9px;cursor:default}
+.ksi-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.ksi-dot.pass{background:var(--green)}.ksi-dot.conditional{background:var(--amber)}.ksi-dot.fail{background:var(--red)}.ksi-dot.error{background:var(--muted)}
+.ksi-name{flex:1;color:var(--text);font-size:8px;line-height:1.4}
+.ksi-score{font-size:9px;color:var(--muted);flex-shrink:0;min-width:28px;text-align:right}
+.ksi-badge{font-size:7px;letter-spacing:.5px;padding:2px 6px;border:1px solid;flex-shrink:0;font-weight:600}
+.ksi-badge.pass{border-color:rgba(61,214,140,.4);color:var(--green)}
+.ksi-badge.conditional{border-color:rgba(232,165,48,.4);color:var(--amber)}
+.ksi-badge.fail{border-color:rgba(240,89,90,.4);color:var(--red)}
+.ksi-badge.error{border-color:var(--border);color:var(--muted)}
+
+/* Dark web alerts */
+.alert-card{padding:12px 14px;border-bottom:1px solid var(--border);border-left:3px solid var(--border);cursor:default}
+.alert-card.credential_exposure,.alert-card.credential-exposure{border-left-color:var(--red)}
+.alert-card.paste,.alert-card.paste_leak{border-left-color:var(--amber)}
+.alert-card.mention,.alert-card.brand_mention{border-left-color:var(--blue)}
+.alert-card.domain,.alert-card.domain_abuse{border-left-color:var(--purple)}
+.alert-card.leak,.alert-card.data_leak{border-left-color:var(--red)}
+.alert-card.acked{opacity:.45}
+.alert-type{font-size:7px;letter-spacing:1.5px;color:var(--muted);margin-bottom:3px;text-transform:uppercase}
+.alert-term{font-size:9px;color:var(--text);margin-bottom:3px;font-weight:600}
+.alert-preview{font-size:8px;color:var(--muted);line-height:1.6;margin-bottom:6px;max-height:44px;overflow:hidden}
+.alert-meta{display:flex;align-items:center;gap:8px;font-size:8px;color:var(--muted)}
+.ack-btn{font-family:var(--mono);font-size:7px;letter-spacing:.5px;padding:2px 7px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:all .12s;margin-left:auto;flex-shrink:0}
+.ack-btn:hover{border-color:var(--green);color:var(--green)}
+.acked-lbl{font-size:7px;color:var(--green);margin-left:auto;flex-shrink:0}
+
+/* Remediation */
+.rem-item{padding:10px 14px;border-bottom:1px solid var(--border);border-left:3px solid var(--border);cursor:default}
+.rem-item.CRITICAL{border-left-color:var(--red)}.rem-item.HIGH{border-left-color:var(--amber)}.rem-item.MEDIUM{border-left-color:var(--blue)}.rem-item.LOW{border-left-color:var(--border)}
+.rem-title{font-size:9px;color:var(--text);margin-bottom:5px;line-height:1.4}
+.rem-meta{display:flex;gap:7px;font-size:8px;color:var(--muted);align-items:center;flex-wrap:wrap}
+.rem-status{font-size:7px;padding:1px 5px;border:1px solid var(--border);color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.rem-status.open{border-color:rgba(240,89,90,.3);color:var(--red)}
+.rem-status.in_progress{border-color:rgba(232,165,48,.3);color:var(--amber)}
+.rem-status.resolved{border-color:rgba(61,214,140,.3);color:var(--green)}
+.rem-overdue{color:var(--red);font-weight:600}
+
+/* Skeleton */
+.skel{background:var(--bg3);animation:shim 1.4s ease-in-out infinite;border-radius:2px;display:inline-block}
+@keyframes shim{0%,100%{opacity:.3}50%{opacity:.8}}
+</style>
+</head>
+<body data-page-title="CLIENT PORTAL" data-back-url="/index.html">
+
+<div class="shell">
+
+  <div class="topbar"></div>
+
+  <!-- Controls bar -->
+  <div class="controls">
+    <span id="clientName" class="client-name"><span class="skel" style="width:160px;height:13px"></span></span>
+    <span id="authBadge" class="auth-badge unknown" style="display:none"></span>
+    <div class="spacer"></div>
+    <button class="btn primary" onclick="downloadReport()">DOWNLOAD REPORT</button>
+  </div>
+
+  <!-- Stat chips -->
+  <div class="stat-row" id="statRow">
+    <div class="stat-chip"><div class="stat-label">Critical</div><div class="stat-val cr"><span class="skel" style="width:28px;height:18px"></span></div></div>
+    <div class="stat-chip"><div class="stat-label">High</div><div class="stat-val hi"><span class="skel" style="width:28px;height:18px"></span></div></div>
+    <div class="stat-chip"><div class="stat-label">KSI Pass</div><div class="stat-val te"><span class="skel" style="width:36px;height:18px"></span></div></div>
+    <div class="stat-chip"><div class="stat-label">Remediations</div><div class="stat-val"><span class="skel" style="width:28px;height:18px"></span></div></div>
+    <div class="stat-chip" id="dwChip"><div class="stat-label">Dark Web</div><div class="stat-val pu"><span class="skel" style="width:28px;height:18px"></span></div></div>
+  </div>
+
+  <!-- Main two-column layout -->
+  <div class="main-grid">
+
+    <!-- LEFT: stack-filtered threat feed -->
+    <div class="feed-panel">
+      <div class="feed-header">
+        <div class="search-wrap">
+          <span class="sico">&#8981;</span>
+          <input type="text" class="srch" id="searchInput" placeholder="Search your stack threats..." oninput="onSearch(this.value)">
+        </div>
+      </div>
+      <div class="feed-filters">
+        <button class="filt-btn on"  id="filtAll"  onclick="setSevFilter(null,this)">ALL</button>
+        <button class="filt-btn cr"  id="filtCrit" onclick="setSevFilter('CRITICAL',this)">CRITICAL</button>
+        <button class="filt-btn hi"  id="filtHigh" onclick="setSevFilter('HIGH',this)">HIGH</button>
+        <button class="filt-btn me"  id="filtMed"  onclick="setSevFilter('MEDIUM',this)">MEDIUM</button>
+        <button class="filt-btn"     id="filtLow"  onclick="setSevFilter('LOW',this)">LOW</button>
+        <span class="feed-count" id="feedCount"></span>
+      </div>
+      <div class="feed-list" id="feedList">
+        <div class="fitem"><div class="fitem-row1"><span class="skel" style="width:54px;height:16px"></span><span class="skel" style="flex:1;height:14px;margin-left:6px"></span></div><div class="fitem-row2"><span class="skel" style="width:45%;height:10px"></span></div></div>
+        <div class="fitem"><div class="fitem-row1"><span class="skel" style="width:40px;height:16px"></span><span class="skel" style="flex:1;height:14px;margin-left:6px"></span></div><div class="fitem-row2"><span class="skel" style="width:35%;height:10px"></span></div></div>
+        <div class="fitem"><div class="fitem-row1"><span class="skel" style="width:54px;height:16px"></span><span class="skel" style="flex:1;height:14px;margin-left:6px"></span></div><div class="fitem-row2"><span class="skel" style="width:50%;height:10px"></span></div></div>
+        <div class="fitem"><div class="fitem-row1"><span class="skel" style="width:40px;height:16px"></span><span class="skel" style="flex:1;height:14px;margin-left:6px"></span></div><div class="fitem-row2"><span class="skel" style="width:40%;height:10px"></span></div></div>
+        <div class="fitem"><div class="fitem-row1"><span class="skel" style="width:50px;height:16px"></span><span class="skel" style="flex:1;height:14px;margin-left:6px"></span></div><div class="fitem-row2"><span class="skel" style="width:55%;height:10px"></span></div></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: tabbed panel -->
+    <div class="right-panel">
+      <div class="tab-bar">
+        <button class="tab-btn on" id="tabKSI"  onclick="switchTab('ksi')">KSI</button>
+        <button class="tab-btn"    id="tabDark" onclick="switchTab('dark')">DARK WEB</button>
+        <button class="tab-btn"    id="tabRem"  onclick="switchTab('rem')">REMEDIATION</button>
+      </div>
+      <div class="tab-content">
+
+        <!-- KSI panel -->
+        <div id="panelKSI">
+          <div class="panel-hdr">
+            <span>KEY SECURITY INDICATORS</span>
+            <span id="ksiPassRate" class="panel-badge ok" style="display:none"></span>
+          </div>
+          <div id="ksiList">
+            <div class="empty-feed"><div class="empty-ico">&#9670;</div><div>Loading KSI data...</div></div>
+          </div>
+        </div>
+
+        <!-- Dark web panel -->
+        <div id="panelDark" style="display:none">
+          <div class="panel-hdr">
+            <span>DARK WEB MONITORS</span>
+            <span id="dwUnack" class="panel-badge" style="display:none"></span>
+          </div>
+          <div id="darkList">
+            <div class="empty-feed"><div class="empty-ico">&#9679;</div><div>Loading alerts...</div></div>
+          </div>
+        </div>
+
+        <!-- Remediation panel -->
+        <div id="panelRem" style="display:none">
+          <div class="panel-hdr">
+            <span>OPEN REMEDIATIONS</span>
+            <span id="remCount" class="panel-badge" style="display:none"></span>
+          </div>
+          <div id="remList">
+            <div class="empty-feed"><div class="empty-ico">&#9650;</div><div>Loading remediations...</div></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const TOKEN     = localStorage.getItem('token');
+const CLIENT_ID = localStorage.getItem('client_id') || '';
+const API       = '/api/v1';
+
+if (!TOKEN || !CLIENT_ID) location.href = '/login.html';
+
+function authHdr() { return {Authorization: 'Bearer ' + TOKEN}; }
+function esc(s) { const d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
+
+// ── Feed ─────────────────────────────────────────
+let feedOffset   = 0;
+let feedSeverity = null;
+let feedSearch   = '';
+let searchTimer  = null;
+
+function onSearch(val) {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { feedSearch = val.trim(); loadFeed(true); }, 320);
+}
+
+function setSevFilter(sev, btn) {
+  feedSeverity = sev;
+  document.querySelectorAll('.filt-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  loadFeed(true);
+}
+
+async function loadFeed(reset) {
+  if (reset) feedOffset = 0;
+
+  const p = new URLSearchParams({client_id: CLIENT_ID, limit: 50, offset: feedOffset});
+  if (feedSeverity) p.set('severity', feedSeverity);
+  if (feedSearch)   p.set('search', feedSearch);
+
+  const list = document.getElementById('feedList');
+  if (reset) list.innerHTML = '<div class="empty-feed"><div class="empty-ico">&#9676;</div><div>Loading...</div></div>';
+
+  try {
+    const res = await fetch(`${API}/items?${p}`, {headers: authHdr()});
+    if (!res.ok) throw new Error(res.status);
+    const d = await res.json();
+    const items = d.items || [];
+
+    document.getElementById('feedCount').textContent = (d.count || 0) + ' items';
+
+    if (reset) list.innerHTML = '';
+
+    if (!items.length && reset) {
+      list.innerHTML = '<div class="empty-feed"><div class="empty-ico">&#9632;</div><div>No threats match your stack</div><div>Try removing filters or check stack configuration</div></div>';
+      return;
+    }
+
+    items.forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'fitem' + (item.is_new ? '' : ' rd');
+      el.dataset.id = item.id;
+      el.onclick = () => toggleExpand(el, item);
+      const tags = Array.isArray(item.tags) ? item.tags.slice(0, 3).join(', ') : '';
+      const date = item.published_at ? item.published_at.substring(0, 10) : '';
+      el.innerHTML =
+        `<div class="fitem-row1">` +
+          `<span class="sev ${esc(item.severity)}">${esc(item.severity || '?')}</span>` +
+          (item.is_new ? '<span class="inew">NEW</span>' : '') +
+          `<span class="ititle">${esc(item.title)}</span>` +
+        `</div>` +
+        `<div class="fitem-row2">` +
+          (item.vendor ? `<span>${esc(item.vendor)}</span>` : '') +
+          (date        ? `<span>${esc(date)}</span>` : '') +
+          (tags        ? `<span>${esc(tags)}</span>` : '') +
+        `</div>` +
+        `<div class="fitem-expand" id="exp-${esc(item.id)}"></div>`;
+      list.appendChild(el);
+    });
+
+    if (items.length === 50) {
+      const btn = document.createElement('button');
+      btn.className = 'load-more';
+      btn.textContent = 'LOAD MORE';
+      btn.onclick = () => { feedOffset += 50; btn.remove(); loadFeed(false); };
+      list.appendChild(btn);
+    }
+  } catch(e) {
+    if (reset) list.innerHTML = '<div class="empty-feed"><div class="empty-ico">&#9632;</div><div>Failed to load feed</div></div>';
+  }
+}
+
+function toggleExpand(el, item) {
+  const exp = el.querySelector('.fitem-expand');
+  const wasOpen = exp.classList.contains('open');
+  document.querySelectorAll('.fitem-expand.open').forEach(e => e.classList.remove('open'));
+  document.querySelectorAll('.fitem.sel').forEach(e => e.classList.remove('sel'));
+  if (!wasOpen) {
+    el.classList.add('sel');
+    exp.classList.add('open');
+    if (!exp.dataset.loaded) {
+      exp.dataset.loaded = '1';
+      exp.innerHTML = buildExpand(item);
+      fetch(`${API}/items/${item.id}/read`, {method: 'POST', headers: authHdr()}).catch(() => {});
+    }
+  }
+}
+
+function buildExpand(item) {
+  const rows = [];
+  if (item.cvss)        rows.push(['CVSS', esc(item.cvss)]);
+  if (item.vendor)      rows.push(['Vendor', esc(item.vendor)]);
+  if (item.product)     rows.push(['Product', esc(item.product)]);
+  if (item.description) rows.push(['Details', esc(item.description.substring(0, 400)) + (item.description.length > 400 ? '...' : '')]);
+  const cves = Array.isArray(item.cve_ids) ? item.cve_ids : [];
+  if (cves.length) rows.push(['CVEs', esc(cves.join(', '))]);
+  const comp = Array.isArray(item.compliance_tags) ? item.compliance_tags : [];
+  if (comp.length) rows.push(['Compliance', esc(comp.join(', '))]);
+  if (item.url) rows.push(['Source', `<a class="alink" href="${esc(item.url)}" target="_blank" rel="noopener">${esc(item.url.substring(0, 80))}</a>`]);
+  return rows.map(([k, v]) => `<div class="exp-row"><span class="exp-key">${k}</span><span class="exp-val">${v}</span></div>`).join('');
+}
+
+// ── Tabs ─────────────────────────────────────────
+function switchTab(tab) {
+  const map = {ksi: ['panelKSI', 'tabKSI'], dark: ['panelDark', 'tabDark'], rem: ['panelRem', 'tabRem']};
+  Object.entries(map).forEach(([k, [panelId, btnId]]) => {
+    document.getElementById(panelId).style.display = k === tab ? '' : 'none';
+    document.getElementById(btnId).classList.toggle('on', k === tab);
+  });
+}
+
+// ── Summary (stat chips + client name) ────────────
+async function loadSummary() {
+  try {
+    const res = await fetch(`${API}/clients/${CLIENT_ID}/security-summary`, {headers: authHdr()});
+    if (!res.ok) throw new Error();
+    const d = await res.json();
+
+    const nameEl = document.getElementById('clientName');
+    nameEl.textContent = d.client_name || localStorage.getItem('display_name') || 'Client Portal';
+
+    const sev = d.scan_findings || {};
+    const ksi = d.ksi || {};
+    const pr  = ksi.total > 0 ? Math.round(100 * ksi.passing / ksi.total) : null;
+
+    document.getElementById('statRow').innerHTML =
+      chip('Critical',     sev.CRITICAL || 0,          'cr') +
+      chip('High',         sev.HIGH     || 0,          'hi') +
+      chip('KSI Pass',     pr != null ? pr + '%' : '—','te') +
+      chip('Remediations', d.open_remediations || 0,   '') +
+      `<div class="stat-chip" id="dwChip"><div class="stat-label">DARK WEB</div><div class="stat-val pu" id="dwChipVal">—</div></div>`;
+  } catch(e) {
+    const nameEl = document.getElementById('clientName');
+    nameEl.textContent = localStorage.getItem('display_name') || 'Client Portal';
+  }
+}
+
+function chip(label, val, cls) {
+  return `<div class="stat-chip"><div class="stat-label">${label}</div><div class="stat-val ${cls}">${val}</div></div>`;
+}
+
+// ── KSI ──────────────────────────────────────────
+async function loadKSI() {
+  try {
+    const res = await fetch(`${API}/clients/${CLIENT_ID}/ksi`, {headers: authHdr()});
+    if (!res.ok) throw new Error();
+    const d   = await res.json();
+    const results = d.results || [];
+    const sum     = d.summary  || {};
+
+    const pr = sum.total > 0 ? Math.round(100 * sum.passing / sum.total) : null;
+    const prEl = document.getElementById('ksiPassRate');
+    if (pr != null) {
+      prEl.style.display = '';
+      prEl.textContent   = pr + '% PASS';
+      prEl.className     = 'panel-badge ' + (pr >= 80 ? 'ok' : '');
+    }
+
+    const list = document.getElementById('ksiList');
+    if (!results.length) {
+      list.innerHTML = '<div class="empty-feed"><div class="empty-ico">&#9670;</div><div>No KSI data available</div></div>';
+      return;
+    }
+    list.innerHTML = results.map(r => {
+      const st = (r.status || 'error').toLowerCase();
+      return `<div class="ksi-item">` +
+        `<div class="ksi-dot ${st}"></div>` +
+        `<span class="ksi-name">${esc(r.ksi_name || r.ksi_id)}</span>` +
+        `<span class="ksi-score">${r.score != null ? r.score : '—'}</span>` +
+        `<span class="ksi-badge ${st}">${st.toUpperCase()}</span>` +
+        `</div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('ksiList').innerHTML = '<div class="empty-feed"><div class="empty-ico">&#9670;</div><div>Failed to load KSI</div></div>';
+  }
+}
+
+// ── Dark Web ─────────────────────────────────────
+async function loadDarkWeb() {
+  try {
+    const res = await fetch(`${API}/clients/${CLIENT_ID}/darkweb-alerts`, {headers: authHdr()});
+    if (!res.ok) throw new Error();
+    const d      = await res.json();
+    const alerts = d.alerts || [];
+    const unack  = d.unacknowledged || 0;
+
+    // Update unacked badge in tab panel
+    const dwUnack = document.getElementById('dwUnack');
+    if (unack > 0) { dwUnack.style.display = ''; dwUnack.textContent = unack + ' UNACK'; }
+
+    // Update dark web chip
+    const chipVal = document.getElementById('dwChipVal');
+    if (chipVal) chipVal.textContent = unack || d.count || 0;
+
+    const list = document.getElementById('darkList');
+    if (!alerts.length) {
+      list.innerHTML = '<div class="empty-feed"><div class="empty-ico">&#9679;</div><div>No dark web alerts</div></div>';
+      return;
+    }
+    list.innerHTML = alerts.map(a => {
+      const typeClass = (a.alert_type || 'unknown').toLowerCase().replace(/_/g, '-');
+      const dt = a.detected_at ? a.detected_at.substring(0, 10) : '';
+      return `<div class="alert-card ${typeClass}${a.is_acknowledged ? ' acked' : ''}" id="alert-${esc(a.id)}">` +
+        `<div class="alert-type">${esc(a.alert_type || 'UNKNOWN')}</div>` +
+        `<div class="alert-term">${esc(a.matched_term || '')}</div>` +
+        (a.content_preview ? `<div class="alert-preview">${esc(a.content_preview)}</div>` : '') +
+        `<div class="alert-meta">` +
+          (a.source ? `<span>${esc(a.source)}</span>` : '') +
+          (dt       ? `<span>${dt}</span>` : '') +
+          (a.is_acknowledged
+            ? '<span class="acked-lbl">ACKNOWLEDGED</span>'
+            : `<button class="ack-btn" onclick="ackAlert('${esc(a.id)}',this)">ACK</button>`) +
+        `</div>` +
+        `</div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('darkList').innerHTML = '<div class="empty-feed"><div class="empty-ico">&#9679;</div><div>Failed to load alerts</div></div>';
+  }
+}
+
+async function ackAlert(alertId, btn) {
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const res = await fetch(`${API}/clients/${CLIENT_ID}/darkweb-alerts/${alertId}/acknowledge`, {
+      method: 'POST', headers: authHdr()
+    });
+    if (res.ok) {
+      const card = document.getElementById('alert-' + alertId);
+      if (card) {
+        card.classList.add('acked');
+        const lbl = document.createElement('span');
+        lbl.className   = 'acked-lbl';
+        lbl.textContent = 'ACKNOWLEDGED';
+        btn.replaceWith(lbl);
+      }
+      // decrement unack chip
+      const chipVal = document.getElementById('dwChipVal');
+      if (chipVal) { const v = parseInt(chipVal.textContent) || 1; chipVal.textContent = Math.max(0, v - 1); }
+      const badge = document.getElementById('dwUnack');
+      if (badge) { const v = parseInt(badge.textContent) || 1; const n = Math.max(0, v - 1); badge.textContent = n + ' UNACK'; if (!n) badge.style.display = 'none'; }
+    }
+  } catch(e) { btn.disabled = false; btn.textContent = 'ACK'; }
+}
+
+// ── Remediation ───────────────────────────────────
+async function loadRemediation() {
+  try {
+    const res = await fetch(`${API}/clients/${CLIENT_ID}/remediation`, {headers: authHdr()});
+    if (!res.ok) throw new Error();
+    const d     = await res.json();
+    const items = d.items || [];
+
+    const open = items.filter(i => i.status !== 'resolved').length;
+    const cntEl = document.getElementById('remCount');
+    if (open > 0) { cntEl.style.display = ''; cntEl.textContent = open + ' OPEN'; }
+
+    const list = document.getElementById('remList');
+    if (!items.length) {
+      list.innerHTML = '<div class="empty-feed"><div class="empty-ico">&#9650;</div><div>No remediation items</div></div>';
+      return;
+    }
+    list.innerHTML = items.map(item => {
+      const sev = (item.severity || '').toUpperCase();
+      const st  = (item.status   || 'open').toLowerCase();
+      const due = item.due_date ? item.due_date.substring(0, 10) : null;
+      const sevColor = sev === 'CRITICAL' ? 'var(--red)' : sev === 'HIGH' ? 'var(--amber)' : sev === 'MEDIUM' ? 'var(--blue)' : 'var(--muted)';
+      return `<div class="rem-item ${sev}">` +
+        `<div class="rem-title">${esc(item.title)}</div>` +
+        `<div class="rem-meta">` +
+          `<span class="rem-status ${st}">${esc(item.status || 'open')}</span>` +
+          (sev ? `<span style="font-size:7px;color:${sevColor}">${sev}</span>` : '') +
+          (due ? `<span class="${item.is_overdue ? 'rem-overdue' : ''}">DUE ${due}</span>` : '') +
+          (item.is_overdue ? '<span class="rem-overdue">OVERDUE</span>' : '') +
+        `</div>` +
+        `</div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('remList').innerHTML = '<div class="empty-feed"><div class="empty-ico">&#9650;</div><div>Failed to load remediations</div></div>';
+  }
+}
+
+// ── PDF download ──────────────────────────────────
+function downloadReport() {
+  window.open(`${API}/clients/${CLIENT_ID}/report/pdf?token=${encodeURIComponent(TOKEN)}`, '_blank');
+}
+
+// ── Init ──────────────────────────────────────────
+(async () => {
+  await loadSummary();
+  loadFeed(true);
+  loadKSI();
+  loadDarkWeb();
+  loadRemediation();
+})();
+</script>
+
+<script src="/nav-component.js"></script>
+</body>
+</html>

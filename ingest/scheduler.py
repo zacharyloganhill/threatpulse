@@ -233,6 +233,18 @@ def start_scheduler():
         misfire_grace_time=300,
     )
 
+    # Integration status indicators — every 5 minutes
+    from api.integration_routes import update_all_integration_statuses
+    scheduler.add_job(
+        update_all_integration_statuses,
+        trigger=IntervalTrigger(minutes=5),
+        id="integration_status_check",
+        name="Integration Status Check",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=60,
+    )
+
     scheduler.start()
     console.print(
         f"[green]✓ Scheduler started[/] — "

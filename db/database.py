@@ -386,6 +386,20 @@ CREATE TABLE IF NOT EXISTS scan_findings (
 );
 """
 
+CREATE_PULL_HISTORY = """
+CREATE TABLE IF NOT EXISTS pull_history (
+    id            TEXT PRIMARY KEY,
+    config_id     TEXT NOT NULL,
+    config_type   TEXT NOT NULL,
+    client_id     TEXT NOT NULL,
+    pulled_at     TEXT NOT NULL,
+    status        TEXT NOT NULL,
+    finding_count INTEGER DEFAULT 0,
+    asset_count   INTEGER DEFAULT 0,
+    error_message TEXT
+);
+"""
+
 CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_severity   ON threat_items(severity);",
     "CREATE INDEX IF NOT EXISTS idx_category   ON threat_items(category);",
@@ -407,6 +421,12 @@ PHASE3_MIGRATIONS = [
     "ALTER TABLE client_vendors ADD COLUMN category TEXT DEFAULT '';",
     "ALTER TABLE client_vendors ADD COLUMN threat_level TEXT DEFAULT 'unknown';",
     "ALTER TABLE client_vendors ADD COLUMN risk_data TEXT DEFAULT '{}';",
+]
+
+PHASE4_MIGRATIONS = [
+    "ALTER TABLE scanner_configs ADD COLUMN connection_status TEXT DEFAULT 'gray';",
+    "ALTER TABLE siem_configs ADD COLUMN connection_status TEXT DEFAULT 'gray';",
+    "CREATE INDEX IF NOT EXISTS idx_pull_history_config ON pull_history(config_id, pulled_at DESC);",
 ]
 
 _db: Optional[aiosqlite.Connection] = None
@@ -442,9 +462,10 @@ async def connect() -> aiosqlite.Connection:
     await _db.execute(CREATE_SIEM_CONFIGS)
     await _db.execute(CREATE_SCANNER_CONFIGS)
     await _db.execute(CREATE_SCAN_FINDINGS)
+    await _db.execute(CREATE_PULL_HISTORY)
     for idx in CREATE_INDEXES:
         await _db.execute(idx)
-    for migration in MIGRATIONS + PHASE3_MIGRATIONS:
+    for migration in MIGRATIONS + PHASE3_MIGRATIONS + PHASE4_MIGRATIONS:
         try:
             await _db.execute(migration)
         except Exception:
@@ -1707,7 +1728,7 @@ async def update_scanner_config(scanner_id: str, **fields) -> Optional[dict]:
     db = get_db()
     allowed = {"label", "host_url", "api_key_enc", "secret_key_enc", "username_enc",
                "password_enc", "extra_config", "poll_interval_hours", "is_active",
-               "last_polled", "last_status"}
+               "last_polled", "last_status", "connection_status"}
     sets, params = [], []
     for k, v in fields.items():
         if k in allowed:
@@ -1861,7 +1882,7 @@ async def update_siem_config(siem_id: str, **fields) -> Optional[dict]:
     db = get_db()
     allowed = {"label", "host_url", "api_key_enc", "secret_key_enc", "username_enc",
                "password_enc", "extra_config", "poll_interval_hours", "is_active",
-               "last_polled", "last_status"}
+               "last_polled", "last_status", "connection_status"}
     sets, params = [], []
     for k, v in fields.items():
         if k in allowed:
@@ -1888,6 +1909,35 @@ def _siem_row(row) -> dict:
     except Exception:
         d["extra_config"] = {}
     return d
+
+
+# ── Pull History ─────────────────────────────────────────────────────────────
+
+async def add_pull_record(config_id: str, config_type: str, client_id: str,
+                           status: str, finding_count: int = 0,
+                           asset_count: int = 0, error_message: str = None):
+    db = get_db()
+    rid = str(uuid.uuid4())[:16]
+    now = datetime.utcnow().isoformat()
+    await db.execute(
+        """INSERT INTO pull_history
+           (id, config_id, config_type, client_id, pulled_at, status,
+            finding_count, asset_count, error_message)
+           VALUES (?,?,?,?,?,?,?,?,?)""",
+        (rid, config_id, config_type, client_id, now, status,
+         finding_count, asset_count, error_message),
+    )
+    await db.commit()
+
+
+async def get_pull_history(config_id: str, limit: int = 10) -> list[dict]:
+    db = get_db()
+    async with db.execute(
+        "SELECT * FROM pull_history WHERE config_id = ? ORDER BY pulled_at DESC LIMIT ?",
+        (config_id, limit),
+    ) as cur:
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
 
 
 # ── KSI Results CRUD ──────────────────────────────────────────────────────────
