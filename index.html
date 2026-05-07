@@ -49,7 +49,7 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
 .tile-desc{font-size:8px;color:var(--muted);line-height:1.6}
 .tile-badge{margin-top:4px;font-size:7px;letter-spacing:1px;padding:2px 6px;border:1px solid;align-self:flex-start}
 .tile-badge.live{border-color:rgba(61,214,140,.4);color:var(--green)}
-.tile-badge.warn{border-color:rgba(232,165,48,.4);color:var(--amber)}
+.tile-badge.warn{border-color:rgba(240,89,90,.4);color:var(--red)}
 .tile-badge.ok{border-color:rgba(0,212,170,.4);color:var(--teal)}
 .tile-badge.admin{border-color:rgba(155,142,245,.4);color:var(--purple)}
 
@@ -139,6 +139,12 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
       <div class="tile-desc">KSI validation, OSCAL document generation, scanner integration, and continuous authorization</div>
       <div class="tile-badge ok" id="ksiBadge">LOADING...</div>
     </a>
+    <a class="tile" href="/darkweb.html">
+      <div class="tile-ico">&#9679;</div>
+      <div class="tile-name">DARK WEB</div>
+      <div class="tile-desc">Monitor Pastebin, GitHub Gists, ransomware leak sites, and HIBP for client credential exposure</div>
+      <div class="tile-badge warn" id="darkwebBadge" style="display:none">ALERTS</div>
+    </a>
     <a class="tile" href="/upload.html">
       <div class="tile-ico">&#9650;</div>
       <div class="tile-name">UPLOAD</div>
@@ -206,13 +212,17 @@ async function loadStats() {
     const d = await res.json();
     const sev = d.by_severity || {};
     const chips = [
-      {label:'Critical', val: sev.CRITICAL||0, cls:'cr'},
-      {label:'High',     val: sev.HIGH||0,     cls:'hi'},
-      {label:'Medium',   val: sev.MEDIUM||0,   cls:'me'},
-      {label:'New Items',val: d.new_count||0,   cls:'te'},
-      {label:'Total Feed',val: d.total||0,      cls:''},
-      {label:'Clients',  val: d.client_count||0,cls:'gr'},
+      {label:'Critical',  val: sev.CRITICAL||0,           cls:'cr'},
+      {label:'High',      val: sev.HIGH||0,               cls:'hi'},
+      {label:'Medium',    val: sev.MEDIUM||0,             cls:'me'},
+      {label:'New Items', val: d.new_count||0,            cls:'te'},
+      {label:'Total Feed',val: d.total||0,                cls:''},
+      {label:'Clients',   val: d.client_count||0,         cls:'gr'},
     ];
+    if ((d.darkweb_alert_count||0) > 0) {
+      const b = document.getElementById('darkwebBadge');
+      if (b) { b.style.display=''; b.textContent = d.darkweb_alert_count + ' UNACK'; }
+    }
     document.getElementById('statRow').innerHTML = chips.map(c =>
       `<div class="stat-chip"><div class="stat-chip-label">${c.label}</div><div class="stat-chip-val ${c.cls}">${Number(c.val).toLocaleString()}</div></div>`
     ).join('');

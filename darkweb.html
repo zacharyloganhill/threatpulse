@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ThreatPulse — Dark Web Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080a0d;--bg2:#0c0f14;--bg3:#111620;--bg4:#161c28;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#c9d4e3;--muted:#4e5d72;--dim:#1e2836;
+  --teal:#00d4aa;--teal-d:rgba(0,212,170,0.08);--teal-m:rgba(0,212,170,0.15);
+  --red:#f0595a;--red-d:rgba(240,89,90,0.1);--red-m:rgba(240,89,90,0.15);
+  --amber:#e8a530;--amber-d:rgba(232,165,48,0.1);
+  --blue:#4d9de0;--blue-d:rgba(77,157,224,0.1);
+  --purple:#9b8ef5;--purple-d:rgba(155,142,245,0.1);
+  --green:#3dd68c;
+  --mono:'JetBrains Mono',monospace;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:12px;overflow-y:auto}
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#1e2836}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px)}
+
+/* Topbar */
+.topbar{display:flex;align-items:center;gap:12px;padding:0 20px;height:44px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+
+/* Controls bar */
+.controls{display:flex;align-items:center;gap:10px;padding:10px 24px;background:var(--bg2);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.ctrl-lbl{font-size:8px;letter-spacing:1.5px;color:var(--muted)}
+select{background:var(--bg3);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:10px;padding:5px 10px;outline:none;cursor:pointer}
+select:focus{border-color:var(--teal)}
+.ctrl-sep{width:1px;height:20px;background:var(--border)}
+.fbtn{font-family:var(--mono);font-size:8px;letter-spacing:.5px;padding:4px 10px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:all .12s}
+.fbtn:hover{border-color:var(--border2);color:var(--text)}
+.fbtn.on{border-color:var(--teal);color:var(--teal);background:var(--teal-d)}
+.fbtn.warn.on{border-color:var(--red);color:var(--red);background:var(--red-d)}
+.scan-btn{font-family:var(--mono);font-size:8px;letter-spacing:1px;padding:5px 14px;background:var(--teal-d);border:1px solid var(--teal);color:var(--teal);cursor:pointer;transition:all .15s;margin-left:auto}
+.scan-btn:hover{background:var(--teal-m)}
+.scan-btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* Main layout */
+.main{display:grid;grid-template-columns:280px 1fr;height:calc(100vh - 44px - 46px);overflow:hidden}
+
+/* Sidebar */
+.sidebar{background:var(--bg2);border-right:1px solid var(--border);overflow-y:auto;display:flex;flex-direction:column}
+.sidebar-section{padding:12px}
+.slabel{font-size:8px;letter-spacing:2px;color:var(--muted);padding:12px 12px 6px;text-transform:uppercase;border-bottom:1px solid var(--border)}
+
+/* Stat chips */
+.stat-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:12px}
+.stat-chip{padding:10px 12px;background:var(--bg3);border:1px solid var(--border)}
+.stat-chip-label{font-size:7px;letter-spacing:1.5px;color:var(--muted);margin-bottom:4px}
+.stat-chip-val{font-size:18px;font-weight:700}
+.stat-chip-val.red{color:var(--red)}
+.stat-chip-val.amber{color:var(--amber)}
+.stat-chip-val.teal{color:var(--teal)}
+.stat-chip-val.purple{color:var(--purple)}
+
+/* Type filter list */
+.type-item{display:flex;align-items:center;justify-content:space-between;padding:7px 12px;cursor:pointer;font-size:9px;color:var(--muted);border-left:2px solid transparent;transition:all .12s}
+.type-item:hover{color:var(--text);background:rgba(255,255,255,.02)}
+.type-item.active{color:var(--text);background:var(--teal-d);border-left-color:var(--teal)}
+.type-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-right:6px}
+.type-cnt{font-size:8px;background:var(--bg3);padding:1px 6px;color:var(--muted);min-width:20px;text-align:center}
+.type-cnt.has{color:var(--red);border:1px solid rgba(240,89,90,.3)}
+
+/* Sources */
+.source-item{display:flex;align-items:center;justify-content:space-between;padding:5px 12px;font-size:9px;color:var(--muted)}
+.source-dot{width:5px;height:5px;border-radius:50%;background:var(--green);margin-right:6px}
+
+/* Feed */
+.feed{overflow-y:auto;background:var(--bg)}
+.feed-hdr{display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--bg);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
+.feed-count{font-size:9px;color:var(--muted)}
+.feed-unack{font-size:8px;padding:2px 7px;border:1px solid rgba(240,89,90,.4);color:var(--red);margin-left:4px}
+
+/* Alert cards */
+.alert-card{padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s;border-left:3px solid transparent}
+.alert-card:hover{background:rgba(255,255,255,.015)}
+.alert-card.unack{border-left-color:var(--red)}
+.alert-card.acked{opacity:.55}
+.alert-card.sel{background:var(--teal-d);border-left-color:var(--teal)}
+
+.alert-row1{display:flex;align-items:flex-start;gap:8px;margin-bottom:6px}
+.alert-type-badge{font-size:7px;letter-spacing:.5px;padding:2px 6px;border:1px solid;flex-shrink:0;margin-top:1px;font-weight:600;white-space:nowrap}
+.type-paste{border-color:rgba(232,165,48,.5);color:var(--amber)}
+.type-gist{border-color:rgba(77,157,224,.5);color:var(--blue)}
+.type-ransomware{border-color:rgba(240,89,90,.5);color:var(--red)}
+.type-hibp{border-color:rgba(155,142,245,.5);color:var(--purple)}
+.type-unknown{border-color:var(--border);color:var(--muted)}
+
+.alert-title{font-size:10px;color:var(--text);flex:1;line-height:1.5}
+.alert-row2{display:flex;gap:8px;font-size:8px;color:var(--muted);align-items:center;flex-wrap:wrap;margin-bottom:5px}
+.alert-preview{font-size:8px;color:var(--muted);line-height:1.7;background:var(--bg3);padding:6px 10px;border-left:2px solid var(--border2);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.alert-actions{display:flex;gap:6px;margin-top:8px}
+
+/* Detail pane */
+.detail{background:var(--bg2);border-left:1px solid var(--border);overflow-y:auto;display:flex;flex-direction:column}
+.dempty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);gap:8px;padding:40px}
+.dempty-ico{font-size:28px;color:var(--dim)}
+.dsec{padding:12px 16px;border-bottom:1px solid var(--border)}
+.dlabel{font-size:7px;letter-spacing:2px;color:var(--teal);margin-bottom:7px;text-transform:uppercase}
+.drow{display:grid;grid-template-columns:90px 1fr;gap:4px;font-size:9px;margin-bottom:4px}
+.dkey{color:var(--muted)}
+.dval{color:var(--text);word-break:break-all}
+.dcontent{font-size:9px;line-height:1.9;color:var(--muted);white-space:pre-wrap;word-break:break-word;padding:12px 16px;background:var(--bg3);margin:10px 16px;border:1px solid var(--border)}
+
+.btn{font-family:var(--mono);font-size:8px;letter-spacing:.5px;padding:4px 12px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:all .15s}
+.btn:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-d)}
+.btn.danger{border-color:var(--red);color:var(--red);background:var(--red-d)}
+.btn.danger:hover{background:var(--red-m)}
+.btn.sm{padding:3px 8px;font-size:8px}
+.btn.primary{border-color:var(--teal);color:var(--teal);background:var(--teal-d)}
+
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;color:var(--muted);gap:10px;text-align:center}
+.empty-ico{font-size:24px;color:var(--dim)}
+
+.toast{position:fixed;bottom:20px;right:20px;padding:10px 16px;background:var(--bg2);border:1px solid var(--teal);color:var(--teal);font-size:9px;letter-spacing:.5px;z-index:10000;transition:opacity .3s}
+.toast.err{border-color:var(--red);color:var(--red)}
+
+.skel{background:var(--bg3);animation:shim 1.4s ease-in-out infinite;border-radius:2px}
+@keyframes shim{0%,100%{opacity:.3}50%{opacity:.8}}
+</style>
+</head>
+<body data-page-title="DARK WEB MONITOR" data-back-url="/index.html">
+
+<div class="topbar"></div>
+
+<!-- Controls -->
+<div class="controls">
+  <span class="ctrl-lbl">CLIENT</span>
+  <select id="clientSel" onchange="switchClient()">
+    <option value="">Select client...</option>
+  </select>
+  <div class="ctrl-sep"></div>
+  <button class="fbtn warn on" id="filterUnack" onclick="toggleFilter('unack')">UNACKNOWLEDGED</button>
+  <button class="fbtn" id="filterAll" onclick="toggleFilter('all')">ALL ALERTS</button>
+  <button class="scan-btn" id="scanBtn" onclick="triggerScan()" disabled>&#9654; RUN SCAN</button>
+</div>
+
+<!-- Main -->
+<div class="main">
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="slabel">Overview</div>
+    <div class="stat-row">
+      <div class="stat-chip"><div class="stat-chip-label">Unacked</div><div class="stat-chip-val red" id="statUnack">—</div></div>
+      <div class="stat-chip"><div class="stat-chip-label">Total</div><div class="stat-chip-val teal" id="statTotal">—</div></div>
+      <div class="stat-chip"><div class="stat-chip-label">Ransomware</div><div class="stat-chip-val amber" id="statRansom">—</div></div>
+      <div class="stat-chip"><div class="stat-chip-label">Breaches</div><div class="stat-chip-val purple" id="statBreaches">—</div></div>
+    </div>
+
+    <div class="slabel">Alert Type</div>
+    <div id="typeNav">
+      <div class="type-item active" data-type="" onclick="setTypeFilter(this,'')">
+        <div style="display:flex;align-items:center"><div class="type-dot" style="background:var(--muted)"></div>All Types</div>
+        <span class="type-cnt" id="cnt-all">—</span>
+      </div>
+      <div class="type-item" data-type="ransomware_listing" onclick="setTypeFilter(this,'ransomware_listing')">
+        <div style="display:flex;align-items:center"><div class="type-dot" style="background:var(--red)"></div>Ransomware Listing</div>
+        <span class="type-cnt" id="cnt-ransomware_listing">0</span>
+      </div>
+      <div class="type-item" data-type="hibp_breach" onclick="setTypeFilter(this,'hibp_breach')">
+        <div style="display:flex;align-items:center"><div class="type-dot" style="background:var(--purple)"></div>HIBP Breach</div>
+        <span class="type-cnt" id="cnt-hibp_breach">0</span>
+      </div>
+      <div class="type-item" data-type="paste_leak" onclick="setTypeFilter(this,'paste_leak')">
+        <div style="display:flex;align-items:center"><div class="type-dot" style="background:var(--amber)"></div>Paste Leak</div>
+        <span class="type-cnt" id="cnt-paste_leak">0</span>
+      </div>
+      <div class="type-item" data-type="gist_leak" onclick="setTypeFilter(this,'gist_leak')">
+        <div style="display:flex;align-items:center"><div class="type-dot" style="background:var(--blue)"></div>Gist Leak</div>
+        <span class="type-cnt" id="cnt-gist_leak">0</span>
+      </div>
+    </div>
+
+    <div class="slabel" style="margin-top:4px">Sources Monitored</div>
+    <div style="padding:4px 0">
+      <div class="source-item"><div style="display:flex;align-items:center"><div class="source-dot"></div>Pastebin</div><span style="font-size:8px;color:var(--green)">ACTIVE</span></div>
+      <div class="source-item"><div style="display:flex;align-items:center"><div class="source-dot"></div>GitHub Gists</div><span style="font-size:8px;color:var(--green)">ACTIVE</span></div>
+      <div class="source-item"><div style="display:flex;align-items:center"><div class="source-dot"></div>Ransomware Feeds</div><span style="font-size:8px;color:var(--green)">ACTIVE</span></div>
+      <div class="source-item"><div style="display:flex;align-items:center"><div class="source-dot" style="background:var(--amber)"></div>HIBP</div><span style="font-size:8px;color:var(--amber)">API KEY REQ.</span></div>
+    </div>
+  </div>
+
+  <!-- Alert Feed -->
+  <div style="display:flex;flex-direction:column;overflow:hidden">
+    <div class="feed-hdr">
+      <span class="feed-count" id="feedCount">Select a client to view alerts</span>
+      <span class="feed-unack" id="feedUnack" style="display:none"></span>
+    </div>
+    <div class="feed" id="feed" style="flex:1;overflow-y:auto"></div>
+  </div>
+
+</div>
+
+<!-- Detail panel (slides in on right) -->
+<div id="detailOverlay" style="display:none;position:fixed;top:0;right:0;width:420px;height:100vh;z-index:500;display:none">
+  <div class="detail" style="height:100%;border-left:1px solid var(--border2)">
+    <div class="dsec" style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px">
+      <span style="font-size:8px;letter-spacing:2px;color:var(--teal)">ALERT DETAIL</span>
+      <button class="btn sm" onclick="closeDetail()">&#10005;</button>
+    </div>
+    <div id="detailBody" style="flex:1;overflow-y:auto"></div>
+  </div>
+</div>
+
+<script>
+const API = '/api/v1';
+function tok() { return localStorage.getItem('token') || ''; }
+function hdr() { return {Authorization: 'Bearer ' + tok(), 'Content-Type': 'application/json'}; }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+let clients = [];
+let alerts = [];
+let selectedClient = null;
+let filterMode = 'unack'; // 'unack' | 'all'
+let filterType  = '';
+let selectedAlert = null;
+
+// ── Init ────────────────────────────────────────────────────────────────────
+
+async function init() {
+  try {
+    const r = await fetch(API + '/admin/clients', {headers: hdr()});
+    if (!r.ok) return;
+    clients = await r.json();
+    const sel = document.getElementById('clientSel');
+    clients.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.id; o.textContent = c.name;
+      sel.appendChild(o);
+    });
+    if (clients.length === 1) {
+      sel.value = clients[0].id;
+      switchClient();
+    }
+  } catch(e) {}
+}
+
+async function switchClient() {
+  const id = document.getElementById('clientSel').value;
+  if (!id) { selectedClient = null; renderFeed([]); return; }
+  selectedClient = clients.find(c => c.id === id) || {id};
+  document.getElementById('scanBtn').disabled = false;
+  await loadAlerts();
+}
+
+async function loadAlerts() {
+  if (!selectedClient) return;
+  document.getElementById('feed').innerHTML = '<div class="empty"><div class="skel" style="height:12px;width:60%;margin-bottom:8px"></div><div class="skel" style="height:12px;width:40%"></div></div>';
+  try {
+    const r = await fetch(`${API}/clients/${selectedClient.id}/darkweb-alerts?limit=500`, {headers: hdr()});
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    alerts = d.alerts || [];
+    updateStats();
+    renderFeed(filtered());
+  } catch(e) {
+    document.getElementById('feed').innerHTML = '<div class="empty"><div class="empty-ico">&#9888;</div><span>Failed to load alerts</span></div>';
+  }
+}
+
+function filtered() {
+  return alerts.filter(a => {
+    if (filterMode === 'unack' && a.is_acknowledged) return false;
+    if (filterType && a.alert_type !== filterType) return false;
+    return true;
+  });
+}
+
+// ── Stats ────────────────────────────────────────────────────────────────────
+
+function updateStats() {
+  const unack   = alerts.filter(a => !a.is_acknowledged).length;
+  const ransom  = alerts.filter(a => a.alert_type === 'ransomware_listing').length;
+  const breaches= alerts.filter(a => a.alert_type === 'hibp_breach').length;
+  document.getElementById('statUnack').textContent   = unack;
+  document.getElementById('statTotal').textContent   = alerts.length;
+  document.getElementById('statRansom').textContent  = ransom;
+  document.getElementById('statBreaches').textContent= breaches;
+
+  const types = ['ransomware_listing','hibp_breach','paste_leak','gist_leak'];
+  document.getElementById('cnt-all').textContent = alerts.length;
+  types.forEach(t => {
+    const cnt = alerts.filter(a => a.alert_type === t).length;
+    const el = document.getElementById('cnt-' + t);
+    if (el) {
+      el.textContent = cnt;
+      el.className = 'type-cnt' + (cnt > 0 ? ' has' : '');
+    }
+  });
+
+  const unackEl = document.getElementById('feedUnack');
+  if (unack > 0) {
+    unackEl.style.display = '';
+    unackEl.textContent = unack + ' UNACK';
+  } else {
+    unackEl.style.display = 'none';
+  }
+}
+
+// ── Render Feed ──────────────────────────────────────────────────────────────
+
+function typeLabel(t) {
+  return {paste_leak:'PASTE LEAK',gist_leak:'GIST LEAK',ransomware_listing:'RANSOMWARE',hibp_breach:'HIBP BREACH'}[t] || t.toUpperCase();
+}
+function typeClass(t) {
+  return {paste_leak:'type-paste',gist_leak:'type-gist',ransomware_listing:'type-ransomware',hibp_breach:'type-hibp'}[t] || 'type-unknown';
+}
+
+function renderFeed(items) {
+  const el = document.getElementById('feed');
+  const countEl = document.getElementById('feedCount');
+  countEl.textContent = items.length + ' alert' + (items.length !== 1 ? 's' : '');
+
+  if (!selectedClient) {
+    el.innerHTML = '<div class="empty"><div class="empty-ico">&#9679;</div><span>Select a client to view dark web alerts</span></div>';
+    return;
+  }
+  if (!items.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-ico" style="color:var(--green)">&#10003;</div><span style="color:var(--green)">No alerts</span><span style="font-size:9px">' + (filterMode === 'unack' ? 'No unacknowledged alerts for this client' : 'No dark web alerts found for this client') + '</span></div>';
+    return;
+  }
+
+  el.innerHTML = items.map(a => {
+    const acked = a.is_acknowledged;
+    const ts = (a.detected_at || '').slice(0, 16).replace('T', ' ');
+    const preview = (a.content_preview || '').slice(0, 200);
+    const isSelected = selectedAlert && selectedAlert.id === a.id;
+    return `<div class="alert-card${acked ? ' acked' : ' unack'}${isSelected ? ' sel' : ''}" onclick="selectAlert('${esc(a.id)}')">
+      <div class="alert-row1">
+        <span class="alert-type-badge ${typeClass(a.alert_type)}">${typeLabel(a.alert_type)}</span>
+        <span class="alert-title">${a.matched_term ? `Match: <strong style="color:var(--red)">${esc(a.matched_term)}</strong> via <span style="color:var(--muted)">${esc(a.source)}</span>` : esc(a.source)}</span>
+        ${acked ? '<span style="font-size:7px;color:var(--muted);flex-shrink:0;margin-top:2px">ACKED</span>' : ''}
+      </div>
+      ${preview ? `<div class="alert-preview">${esc(preview)}</div>` : ''}
+      <div class="alert-row2" style="margin-top:6px">
+        <span>${esc(ts)} UTC</span>
+        ${a.url ? `<a href="${esc(a.url)}" target="_blank" rel="noopener" style="color:var(--blue);font-size:8px" onclick="event.stopPropagation()">&#8599; VIEW SOURCE</a>` : ''}
+        ${!acked ? `<button class="btn sm" onclick="event.stopPropagation();ackAlert('${esc(a.id)}')">ACK</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Actions ──────────────────────────────────────────────────────────────────
+
+function selectAlert(id) {
+  selectedAlert = alerts.find(a => a.id === id);
+  if (!selectedAlert) return;
+  renderFeed(filtered());
+  showDetail(selectedAlert);
+}
+
+function showDetail(a) {
+  const ts = (a.detected_at || '').slice(0, 19).replace('T', ' ');
+  const overlay = document.getElementById('detailOverlay');
+  overlay.style.display = 'block';
+  document.getElementById('detailBody').innerHTML = `
+    <div class="dsec">
+      <div class="dlabel">Alert Info</div>
+      <div class="drow"><span class="dkey">Type</span><span class="dval"><span class="alert-type-badge ${typeClass(a.alert_type)}">${typeLabel(a.alert_type)}</span></span></div>
+      <div class="drow"><span class="dkey">Source</span><span class="dval">${esc(a.source)}</span></div>
+      <div class="drow"><span class="dkey">Matched</span><span class="dval" style="color:var(--red);font-weight:600">${esc(a.matched_term || '—')}</span></div>
+      <div class="drow"><span class="dkey">Detected</span><span class="dval">${esc(ts)} UTC</span></div>
+      <div class="drow"><span class="dkey">Status</span><span class="dval">${a.is_acknowledged ? '<span style="color:var(--muted)">Acknowledged</span>' : '<span style="color:var(--red)">Unacknowledged</span>'}</span></div>
+      ${a.url ? `<div class="drow"><span class="dkey">URL</span><span class="dval"><a href="${esc(a.url)}" target="_blank" rel="noopener" style="color:var(--blue)">${esc(a.url.slice(0,60))}${a.url.length>60?'…':''}</a></span></div>` : ''}
+    </div>
+    ${a.content_preview ? `
+    <div class="dsec">
+      <div class="dlabel">Content Preview</div>
+      <div class="dcontent">${esc(a.content_preview)}</div>
+    </div>` : ''}
+    <div class="dsec" style="display:flex;gap:8px;flex-wrap:wrap">
+      ${!a.is_acknowledged ? `<button class="btn primary" onclick="ackAlert('${esc(a.id)}')">&#10003; ACKNOWLEDGE</button>` : ''}
+      ${a.url ? `<a href="${esc(a.url)}" target="_blank" rel="noopener" class="btn" style="text-decoration:none">&#8599; OPEN SOURCE</a>` : ''}
+      <button class="btn" onclick="closeDetail()">CLOSE</button>
+    </div>
+  `;
+}
+
+function closeDetail() {
+  document.getElementById('detailOverlay').style.display = 'none';
+  selectedAlert = null;
+  renderFeed(filtered());
+}
+
+async function ackAlert(id) {
+  if (!selectedClient) return;
+  try {
+    await fetch(`${API}/clients/${selectedClient.id}/darkweb-alerts/${id}/acknowledge`, {
+      method: 'POST', headers: hdr()
+    });
+    const a = alerts.find(x => x.id === id);
+    if (a) a.is_acknowledged = 1;
+    updateStats();
+    renderFeed(filtered());
+    if (selectedAlert && selectedAlert.id === id) {
+      selectedAlert.is_acknowledged = 1;
+      showDetail(selectedAlert);
+    }
+    showToast('Alert acknowledged');
+  } catch(e) { showToast('Failed to acknowledge', true); }
+}
+
+async function triggerScan() {
+  if (!selectedClient) return;
+  const btn = document.getElementById('scanBtn');
+  btn.disabled = true;
+  btn.textContent = 'SCANNING...';
+  showToast('Dark web scan started...');
+  try {
+    const r = await fetch(`${API}/clients/${selectedClient.id}/darkweb-scan`, {
+      method: 'POST', headers: hdr()
+    });
+    const d = await r.json();
+    showToast(`Scan complete — ${d.alerts_created || 0} new alerts`);
+    await loadAlerts();
+  } catch(e) {
+    showToast('Scan failed', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '▶ RUN SCAN';
+  }
+}
+
+function toggleFilter(mode) {
+  filterMode = mode;
+  document.getElementById('filterUnack').className = 'fbtn warn' + (mode === 'unack' ? ' on' : '');
+  document.getElementById('filterAll').className   = 'fbtn'      + (mode === 'all'  ? ' on' : '');
+  renderFeed(filtered());
+}
+
+function setTypeFilter(el, type) {
+  filterType = type;
+  document.querySelectorAll('.type-item').forEach(e => e.classList.remove('active'));
+  el.classList.add('active');
+  renderFeed(filtered());
+}
+
+function showToast(msg, err = false) {
+  const t = document.createElement('div');
+  t.className = 'toast' + (err ? ' err' : '');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.style.opacity = '0', 2500);
+  setTimeout(() => t.remove(), 3000);
+}
+
+init();
+</script>
+<script src="/nav-component.js"></script>
+</body>
+</html>
