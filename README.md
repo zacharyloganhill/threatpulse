@@ -592,6 +592,90 @@ Risk Portfolio is displayed in the client dashboard's Risk Portfolio tab with `$
 | `/upload.html` | Scan upload center and export tools |
 | `/admin.html` | Client management, assets, users, exports |
 | `/client_dashboard.html?client_id={id}` | Per-client portal with all Phase 3 features |
+| `/fedramp.html` | FedRAMP 20x compliance dashboard (KSI, OSCAL, scanners, SIEMs) |
+
+---
+
+## FedRAMP 20x Compliance Features
+
+PhantomFeed includes a full FedRAMP 20x continuous monitoring capability suite.
+
+### Section 1 — Automated Scanner Pulls
+
+| Scanner | Auth Method | Notes |
+|---------|-------------|-------|
+| Tenable.io | `X-ApiKeys` header (accessKey + secretKey) | Export API + workbench fallback |
+| Tenable.sc | Session token (`/rest/token`) | On-prem; set `extra_config.mode=sc` |
+| Rapid7 InsightVM | HTTP Basic auth | Paginated asset + vuln endpoints |
+| Qualys VMDR | Basic auth + `X-Requested-With` | XML detection API |
+| CrowdStrike Spotlight | OAuth2 client_credentials | Two-phase query + detail fetch |
+
+All credentials are **Fernet-encrypted** at rest. Set `PHANTOMFEED_ENCRYPTION_KEY` in `.env`:
+
+```
+PHANTOMFEED_ENCRYPTION_KEY=<base64-url-safe-32-byte-key>
+# Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Scanner API endpoints (prefix: `/api/v1/clients/{id}/`):
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `scanners` | List scanner configs (credentials masked) |
+| POST | `scanners` | Add scanner config |
+| PATCH | `scanners/{scanner_id}` | Update config |
+| DELETE | `scanners/{scanner_id}` | Delete scanner + findings |
+| POST | `scanners/{scanner_id}/poll` | Trigger immediate poll |
+| GET | `scan-findings` | List findings (filterable by severity, scanner) |
+| GET | `scan-findings/summary` | Severity counts + scanner status |
+
+### Section 2 — SIEM Integrations
+
+| SIEM | Auth Method | Notes |
+|------|-------------|-------|
+| Splunk | Session key (`/services/auth/login`) | Saved-search job polling |
+| Microsoft Sentinel | Azure AD client_credentials OAuth2 | Log Analytics KQL query |
+| IBM QRadar | `SEC` token header | Offenses API with pagination |
+| Elastic Security | `ApiKey` header | Detection signals + fallback alerts API |
+
+SIEM endpoints: same pattern as scanners at `/api/v1/clients/{id}/siems/...`
+
+### Section 3 — OSCAL Output Engine
+
+| Document | Format | Description |
+|----------|--------|-------------|
+| POA&M | XML | Open remediation items as OSCAL plan-of-action-and-milestones |
+| SAR | XML | Scan findings as OSCAL assessment-results |
+| VDR | JSON | CVE-tagged vulnerabilities with asset mapping |
+| OAR | JSON | Posture score, authorization decision, CM activity log |
+| SSP (partial) | XML | System characteristics + 8 control implementation stubs |
+| Bundle | ZIP | All 5 documents in one download |
+
+OSCAL endpoints: `GET /api/v1/clients/{id}/oscal/{type}.{ext}` and `/oscal/bundle.zip`
+
+### Section 4 — KSI Validation Engine
+
+Seven Key Security Indicators validated automatically every 6 hours:
+
+| KSI | Category | Pass Threshold |
+|-----|----------|----------------|
+| KSI-1 | Vulnerability Management | No CRITICAL/HIGH CVEs open > 15/30 days |
+| KSI-2 | Patch Currency | ≥90% patch rate |
+| KSI-3 | Continuous Monitoring | All scanners polled within interval + 2h |
+| KSI-4 | Incident Detection | ≥1 active SIEM with recent data |
+| KSI-5 | POA&M Timeliness | 0 overdue CRITICAL remediations |
+| KSI-6 | Supply Chain | ≥80% vendors assessed within 30 days |
+| KSI-7 | Dark Web Exposure | No unacknowledged alerts > 48 hours |
+
+KSI API: `GET /api/v1/clients/{id}/ksi`, `POST /api/v1/clients/{id}/ksi/validate`
+
+### Section 6 — Audit Log
+
+Every API call is logged to the `audit_log` table (event type, user, client, method, path, status, IP, duration). Export as CSV:
+
+- `GET /api/v1/audit` — global audit log (admin)
+- `GET /api/v1/clients/{id}/audit` — per-client audit log
+- `GET /api/v1/clients/{id}/audit.csv` — CSV export
 
 ---
 
