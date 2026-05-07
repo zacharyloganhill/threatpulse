@@ -228,3 +228,17 @@ async def all_clients_ranking():
     from analytics.benchmarking import BenchmarkingEngine
     engine = BenchmarkingEngine()
     return await engine.get_all_clients_ranking()
+
+
+# ── Breach Cost & ROI ──────────────────────────────────────────────────────
+
+@router.get("/clients/{client_id}/risk-portfolio", summary="Full breach cost and ROI analysis")
+async def risk_portfolio(client_id: str):
+    from analytics.breach_cost import get_client_risk_portfolio
+    return await get_client_risk_portfolio(client_id)
+
+
+@router.get("/breach-cost/industries", summary="IBM 2024 breach cost by industry")
+async def breach_cost_industries():
+    from analytics.breach_cost import INDUSTRY_BREACH_COSTS
+    return {"source": "IBM Cost of a Data Breach Report 2024", "costs": INDUSTRY_BREACH_COSTS}

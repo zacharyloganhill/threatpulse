@@ -678,7 +678,7 @@ async function loadRiskPortfolio() {
       <span style="font-family:var(--mono);font-size:11px;color:var(--muted);width:20px">#${i+1}</span>
       <div class="exposure-item">
         <div>${item.title ? item.title.slice(0, 80) : 'Unknown'}</div>
-        <div class="exposure-meta">${item.severity} &middot; ${(item.breach_probability * 100).toFixed(1)}% breach probability</div>
+        <div class="exposure-meta">${item.severity} &middot; ROI: ${item.roi_ratio}x if patched &middot; Rem cost: ${fmtMoney(item.remediation_cost)}</div>
       </div>
       <div class="exposure-loss">${fmtMoney(item.expected_loss)}</div>
     </div>
