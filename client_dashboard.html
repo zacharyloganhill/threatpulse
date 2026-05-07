@@ -556,7 +556,8 @@ async function triggerDarkwebScan() {
 
 async function loadTabletops() {
   if (!clientId) return;
-  const data = await api(`/clients/${clientId}/tabletop`);
+  const resp = await api(`/clients/${clientId}/tabletops`);
+  const data = resp ? resp.exercises : [];
   const el = document.getElementById('tabletopList');
   if (!data || !data.length) {
     el.innerHTML = '<div class="empty-state">No tabletop exercises generated yet<br><small>Click "Generate Scenario" to create an AI-powered tabletop exercise based on current threats</small></div>';
@@ -565,36 +566,36 @@ async function loadTabletops() {
   el.innerHTML = data.map(ex => `
     <div class="item-row">
       <div class="item-body">
-        <div class="item-title">${ex.title || ex.scenario_type + ' scenario'}</div>
-        <div class="item-meta">Generated: ${timeAgo(ex.generated_at)} &middot; Type: ${ex.scenario_type}</div>
+        <div class="item-title">${esc(ex.title || ex.scenario_type + ' scenario')}</div>
+        <div class="item-meta">Generated: ${timeAgo(ex.created_at)} &middot; Type: ${esc(ex.scenario_type)}</div>
         <div class="item-badges">
           ${ex.conducted_at ? `<span class="pill badge-teal">Conducted</span>` : '<span class="pill">Draft</span>'}
-          ${ex.participants ? `<span class="pill">${ex.participants} participants</span>` : ''}
         </div>
       </div>
       <div style="display:flex;gap:6px">
-        <a class="btn btn-sm" href="${API}/clients/${clientId}/tabletop/${ex.id}/facilitator.pdf?token=${token}" target="_blank">Facilitator PDF</a>
-        <a class="btn btn-sm" href="${API}/clients/${clientId}/tabletop/${ex.id}/participant.pdf?token=${token}" target="_blank">Participant PDF</a>
-        <a class="btn btn-sm" href="${API}/clients/${clientId}/tabletop/${ex.id}/slides.pptx?token=${token}" target="_blank">Slides</a>
+        <a class="btn btn-sm" href="${API}/clients/${clientId}/tabletops/${ex.id}/export.pdf?token=${token}" target="_blank">PDF</a>
+        <a class="btn btn-sm" href="${API}/clients/${clientId}/tabletops/${ex.id}/export.pptx?token=${token}" target="_blank">PPTX</a>
       </div>
     </div>
   `).join('');
 }
 
 async function generateTabletop() {
-  const types = ['ransomware', 'data_breach', 'supply_chain', 'nation_state', 'insider_threat'];
+  const types = ['ransomware', 'data_breach', 'supply_chain', 'insider_threat', 'ddos', 'phishing', 'zero_day', 'cloud_breach'];
   const type = prompt('Scenario type:\n' + types.join(', '), 'ransomware');
   if (!type) return;
+  const custom = prompt('Custom scenario details (optional — leave blank for default):', '') || '';
   toast('Generating scenario with AI... this may take 30-60 seconds', 'info', 60000);
-  const data = await api(`/clients/${clientId}/tabletop/generate`, {
+  const data = await api(`/clients/${clientId}/tabletops/generate`, {
     method: 'POST',
-    body: JSON.stringify({ scenario_type: type, days_lookback: 30 }),
+    body: JSON.stringify({ scenario_type: type, custom_prompt: custom }),
   });
-  if (data) {
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  if (data && data.id) {
     toast('Scenario generated!', 'success');
     loadTabletops();
   } else {
-    toast('Generation failed — check Ollama is running', 'error');
+    toast('Generation failed — check Ollama is running (or will use fallback)', 'error');
   }
 }
 

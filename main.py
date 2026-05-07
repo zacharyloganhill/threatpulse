@@ -40,6 +40,7 @@ from api.actor_routes import router as actor_router
 from api.misp_routes import router as misp_router
 from api.deck_routes import router as deck_router
 from api.cmmc_routes import router as cmmc_router
+from api.tabletop_routes import router as tabletop_router
 
 console = Console()
 
@@ -131,6 +132,7 @@ app.include_router(actor_router, prefix="/api/v1", tags=["Threat Actors"])
 app.include_router(misp_router, prefix="/api/v1", tags=["MISP"])
 app.include_router(deck_router, prefix="/api/v1", tags=["Briefing Deck"])
 app.include_router(cmmc_router, prefix="/api/v1", tags=["CMMC"])
+app.include_router(tabletop_router, prefix="/api/v1", tags=["Tabletop"])
 
 
 @app.api_route("/api/ollama/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
