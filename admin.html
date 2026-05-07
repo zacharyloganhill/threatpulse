@@ -192,6 +192,7 @@ function renderClientPanel() {
       <button class="tab" onclick="cTab('users')">Users</button>
       <button class="tab" onclick="cTab('scanners')">Scanners</button>
       <button class="tab" onclick="cTab('siems')">SIEMs</button>
+      <button class="tab" onclick="cTab('audit')">Audit Log</button>
     </div>
 
     <div id="cpane-assets" class="tab-pane active"></div>
@@ -200,12 +201,13 @@ function renderClientPanel() {
     <div id="cpane-users" class="tab-pane"></div>
     <div id="cpane-scanners" class="tab-pane"></div>
     <div id="cpane-siems" class="tab-pane"></div>
+    <div id="cpane-audit" class="tab-pane"></div>
   `;
   loadAssetsTab();
 }
 
 function cTab(name) {
-  const tabs = ['assets','history','export','users','scanners','siems'];
+  const tabs = ['assets','history','export','users','scanners','siems','audit'];
   document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active', tabs[i]===name));
   document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
   document.getElementById('cpane-'+name).classList.add('active');
@@ -215,6 +217,7 @@ function cTab(name) {
   else if (name==='users') loadUsersTab();
   else if (name==='scanners') loadScannersTab();
   else if (name==='siems') loadSIEMsTab();
+  else if (name==='audit') loadAuditTab();
 }
 
 // ── Assets tab ─────────────────────────────────────────────────────────────────
@@ -728,6 +731,39 @@ async function deleteSIEM(siemId) {
   });
   if (r.ok) { toast('SIEM deleted','success'); loadSIEMsTab(); }
   else toast('Delete failed','error');
+}
+
+// ── Audit Log tab ──────────────────────────────────────────────────────────────
+async function loadAuditTab() {
+  const el = document.getElementById('cpane-audit');
+  if (!el || !selectedClient) return;
+  el.innerHTML = '<span class="spinner"></span>';
+  try {
+    const r = await fetch(`${API}/clients/${selectedClient.id}/audit?limit=100`, {headers:{Authorization:'Bearer '+getToken()}});
+    const data = r.ok ? await r.json() : {events:[], total:0};
+    const events = data.events || [];
+    el.innerHTML = `
+      <div class="section-header" style="display:flex;justify-content:space-between;align-items:center">
+        <span>Audit Log (${data.total} total events)</span>
+        <a href="${API}/clients/${selectedClient.id}/audit.csv?token=${getToken()}" download class="btn sm primary">⬇ Export CSV</a>
+      </div>
+      <table>
+        <thead><tr><th>Time</th><th>Event</th><th>User</th><th>Method</th><th>Path</th><th>Status</th><th>Duration</th></tr></thead>
+        <tbody>${events.length ? events.map(e=>`
+          <tr>
+            <td style="font-size:9px;color:var(--muted)">${(e.timestamp||'').slice(0,19).replace('T',' ')}</td>
+            <td style="font-size:9px">${esc(e.event_type||'—')}</td>
+            <td style="font-size:9px;color:var(--muted)">${esc(e.username||'anon')}</td>
+            <td><span style="font-size:8px;color:${e.method==='GET'?'var(--blue)':e.method==='POST'?'var(--green)':e.method==='DELETE'?'var(--red)':'var(--muted)'}">${esc(e.method||'—')}</span></td>
+            <td style="font-size:9px;color:var(--muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.path||'')}">${esc((e.path||'').slice(0,60))}</td>
+            <td><span style="font-size:9px;color:${e.status_code<400?'var(--green)':e.status_code<500?'var(--amber)':'var(--red)'}">${e.status_code||'—'}</span></td>
+            <td style="font-size:9px;color:var(--muted)">${e.duration_ms?e.duration_ms.toFixed(0)+'ms':'—'}</td>
+          </tr>
+        `).join('') : '<tr><td colspan="7" class="empty">No audit events yet</td></tr>'}
+        </tbody>
+      </table>
+    `;
+  } catch(e) { el.innerHTML = '<div class="empty">Error loading audit log</div>'; }
 }
 
 loadClients();

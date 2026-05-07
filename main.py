@@ -46,6 +46,7 @@ from api.scanner_routes import router as scanner_router
 from api.siem_routes import router as siem_router
 from api.oscal_routes import router as oscal_router
 from api.ksi_routes import router as ksi_router
+from api.audit_routes import router as audit_router
 
 console = Console()
 
@@ -64,6 +65,11 @@ async def lifespan(app: FastAPI):
     # Connect to database
     await db.connect()
     console.print("[green]✓ Database connected[/]")
+
+    # Initialize audit log (same SQLite file, separate connection)
+    from db.audit_log import init_audit_db
+    await init_audit_db()
+    console.print("[green]✓ Audit log ready[/]")
 
     # Seed admin user
     from auth.auth import seed_admin_user
@@ -123,6 +129,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# FedRAMP 20x audit logging middleware
+from api.audit_middleware import AuditMiddleware
+app.add_middleware(AuditMiddleware)
+
 app.include_router(router, prefix="/api/v1", tags=["Threat Feed"])
 app.include_router(auth_router, prefix="/auth", tags=["Auth"])
 app.include_router(admin_router, prefix="/api/v1/admin", tags=["Admin"])
@@ -143,6 +153,7 @@ app.include_router(scanner_router, tags=["FedRAMP Scanners"])
 app.include_router(siem_router, tags=["FedRAMP SIEMs"])
 app.include_router(oscal_router, tags=["FedRAMP OSCAL"])
 app.include_router(ksi_router, tags=["FedRAMP KSI"])
+app.include_router(audit_router, tags=["FedRAMP Audit"])
 
 
 @app.api_route("/api/ollama/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
