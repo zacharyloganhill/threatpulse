@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PhantomFeed — FedRAMP 20x</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080a0d;--bg2:#0c0f14;--bg3:#111620;--bg4:#161c28;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#c9d4e3;--muted:#4e5d72;
+  --teal:#00d4aa;--red:#f0595a;--amber:#e8a530;--blue:#4d9de0;
+  --purple:#9b8ef5;--green:#3dd68c;--pink:#e878a6;
+  --mono:'JetBrains Mono',monospace;
+}
+html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:12px}
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#1e2836}
+
+.topbar{display:flex;align-items:center;gap:12px;padding:0 20px;height:44px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+.logo{font-size:11px;font-weight:700;letter-spacing:3px;color:var(--teal)}
+.vsep{width:1px;height:18px;background:var(--border)}
+.tnav{font-family:var(--mono);font-size:8px;letter-spacing:1px;padding:4px 10px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;text-decoration:none;display:inline-block;transition:all .15s}
+.tnav:hover,.tnav.on{border-color:var(--teal);color:var(--teal)}
+.spacer{flex:1}
+
+.controls{display:flex;align-items:center;gap:10px;padding:10px 20px;background:var(--bg2);border-bottom:1px solid var(--border)}
+.ctrl-lbl{font-size:8px;letter-spacing:1px;color:var(--muted)}
+select{font-family:var(--mono);font-size:10px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px 8px;outline:none}
+select:focus{border-color:var(--teal)}
+.btn{font-family:var(--mono);font-size:8px;padding:4px 9px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:all .12s}
+.btn:hover{border-color:var(--teal);color:var(--teal);background:rgba(0,212,170,.06)}
+.btn.primary{border-color:var(--teal);color:var(--teal)}
+
+.page{padding:20px;max-width:1400px;margin:0 auto}
+
+/* KSI Grid */
+.ksi-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:20px}
+.ksi-card{background:var(--bg2);border:1px solid var(--border);padding:14px 10px;text-align:center;position:relative;transition:border-color .2s}
+.ksi-card.pass{border-color:var(--green)}
+.ksi-card.conditional{border-color:var(--amber)}
+.ksi-card.fail{border-color:var(--red)}
+.ksi-card.error{border-color:var(--muted)}
+.ksi-id{font-size:8px;letter-spacing:2px;color:var(--muted);margin-bottom:6px}
+.ksi-status{font-size:13px;font-weight:700;margin-bottom:4px}
+.ksi-status.pass{color:var(--green)}
+.ksi-status.conditional{color:var(--amber)}
+.ksi-status.fail{color:var(--red)}
+.ksi-score{font-size:20px;font-weight:700;line-height:1;margin-bottom:4px}
+.ksi-name{font-size:7px;letter-spacing:1px;color:var(--muted);text-transform:uppercase}
+
+/* Auth badge */
+.auth-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:2px;font-size:9px;letter-spacing:2px;font-weight:700;text-transform:uppercase}
+.auth-badge.authorized{background:rgba(61,214,140,.12);border:1px solid var(--green);color:var(--green)}
+.auth-badge.conditional{background:rgba(232,165,48,.12);border:1px solid var(--amber);color:var(--amber)}
+.auth-badge.not-authorized{background:rgba(240,89,90,.12);border:1px solid var(--red);color:var(--red)}
+.auth-badge.unknown{background:rgba(78,93,114,.12);border:1px solid var(--muted);color:var(--muted)}
+
+/* Section cards */
+.section{background:var(--bg2);border:1px solid var(--border);padding:16px;margin-bottom:16px}
+.section-header{font-size:8px;letter-spacing:2px;color:var(--teal);text-transform:uppercase;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--border)}
+th{font-size:8px;letter-spacing:1.5px;color:var(--muted);font-weight:400;text-transform:uppercase}
+td{font-size:10px}
+tr:hover td{background:var(--bg3)}
+
+.status-badge{display:inline-block;padding:2px 6px;font-size:7px;letter-spacing:1px;text-transform:uppercase;font-weight:700;border-radius:2px}
+.status-badge.pass,.status-badge.ok{background:rgba(61,214,140,.15);color:var(--green)}
+.status-badge.conditional,.status-badge.warn{background:rgba(232,165,48,.15);color:var(--amber)}
+.status-badge.fail,.status-badge.error{background:rgba(240,89,90,.15);color:var(--red)}
+.status-badge.never,.status-badge.unknown{background:rgba(78,93,114,.15);color:var(--muted)}
+
+.oscal-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.oscal-card{background:var(--bg3);border:1px solid var(--border);padding:12px;text-align:center}
+.oscal-type{font-size:18px;font-weight:700;color:var(--teal);margin-bottom:4px}
+.oscal-label{font-size:7px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:6px}
+.oscal-count{font-size:9px;color:var(--muted);margin-bottom:8px}
+
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.stat-card{background:var(--bg2);border:1px solid var(--border);padding:18px}
+.snum{font-size:28px;font-weight:700;line-height:1}
+.slbl{font-size:8px;letter-spacing:1.5px;color:var(--muted);margin-top:6px;text-transform:uppercase}
+
+.empty{color:var(--muted);font-size:10px;padding:20px;text-align:center}
+.spinner::after{content:'...';animation:dots 1.2s infinite}
+@keyframes dots{0%{content:''}33%{content:'.'}66%{content:'..'}100%{content:'...'}}
+
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="logo">PHANTOMFEED</span>
+  <div class="vsep"></div>
+  <a href="/dashboard.html" class="tnav">FEED</a>
+  <a href="/analytics.html" class="tnav">ANALYTICS</a>
+  <a href="/actors.html" class="tnav">ACTORS</a>
+  <a href="/cmmc.html" class="tnav">CMMC</a>
+  <a href="/supplychain.html" class="tnav">SUPPLY CHAIN</a>
+  <a href="/fedramp.html" class="tnav on">FEDRAMP 20x</a>
+  <a href="/upload.html" class="tnav">UPLOAD</a>
+  <a href="/admin.html" class="tnav">ADMIN</a>
+  <div class="spacer"></div>
+  <span style="font-size:9px;color:var(--muted)" id="last-refreshed">—</span>
+</div>
+
+<div class="controls">
+  <span class="ctrl-lbl">CLIENT</span>
+  <select id="client-sel" onchange="loadDashboard()">
+    <option value="">— Select Client —</option>
+  </select>
+  <div class="vsep"></div>
+  <button class="btn" onclick="triggerKSIValidation()">Run KSI Validation</button>
+  <button class="btn" onclick="downloadBundle()">⬇ OSCAL Bundle ZIP</button>
+  <div class="spacer"></div>
+  <div id="auth-badge-wrap"></div>
+</div>
+
+<div class="page">
+
+  <!-- KSI Status Grid -->
+  <div id="ksi-section">
+    <div class="section-header" style="font-size:8px;letter-spacing:2px;color:var(--teal);text-transform:uppercase;margin-bottom:12px">Key Security Indicators</div>
+    <div class="ksi-grid" id="ksi-grid">
+      <div class="empty" style="grid-column:1/-1">Select a client to view KSI status</div>
+    </div>
+  </div>
+
+  <!-- Summary Stats -->
+  <div class="stat-row" id="stat-row" style="display:none">
+    <div class="stat-card"><div class="snum" id="st-total">—</div><div class="slbl">Total Findings</div></div>
+    <div class="stat-card"><div class="snum" id="st-crit" style="color:var(--red)">—</div><div class="slbl">Critical</div></div>
+    <div class="stat-card"><div class="snum" id="st-high" style="color:var(--amber)">—</div><div class="slbl">High</div></div>
+    <div class="stat-card"><div class="snum" id="st-open" style="color:var(--blue)">—</div><div class="slbl">Open Remediations</div></div>
+  </div>
+
+  <!-- OSCAL Documents -->
+  <div class="section" id="oscal-section" style="display:none">
+    <div class="section-header">OSCAL Document Exports</div>
+    <div class="oscal-grid" id="oscal-grid"></div>
+  </div>
+
+  <!-- VDR Table -->
+  <div class="section" id="vdr-section" style="display:none">
+    <div class="section-header">Vulnerability Disclosure Report (Top 20 CVEs)</div>
+    <table>
+      <thead><tr>
+        <th>CVE</th><th>Title</th><th>Severity</th><th>CVSS</th><th>Asset</th><th>Scanner</th><th>First Seen</th>
+      </tr></thead>
+      <tbody id="vdr-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- Scanner Status -->
+  <div class="section" id="scanner-section" style="display:none">
+    <div class="section-header">Scanner Integration Status</div>
+    <table>
+      <thead><tr><th>Type</th><th>Label</th><th>Status</th><th>Last Polled</th><th>Interval</th></tr></thead>
+      <tbody id="scanner-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- SIEM Status -->
+  <div class="section" id="siem-section" style="display:none">
+    <div class="section-header">SIEM Integration Status</div>
+    <table>
+      <thead><tr><th>Type</th><th>Label</th><th>Status</th><th>Last Polled</th><th>Interval</th></tr></thead>
+      <tbody id="siem-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- OAR Preview -->
+  <div class="section" id="oar-section" style="display:none">
+    <div class="section-header">Ongoing Authorization Report Preview</div>
+    <div id="oar-preview" style="font-size:10px;line-height:1.7"></div>
+  </div>
+
+</div>
+
+<script>
+const API = '/api/v1';
+function getToken() { return localStorage.getItem('phantomfeed_token') || ''; }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+async function loadClients() {
+  try {
+    const r = await fetch(`${API}/admin/clients`, {headers:{Authorization:'Bearer '+getToken()}});
+    const data = r.ok ? await r.json() : [];
+    const sel = document.getElementById('client-sel');
+    data.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.id; o.textContent = c.name;
+      sel.appendChild(o);
+    });
+    // Auto-select if single client or stored preference
+    const stored = localStorage.getItem('fedramp_client');
+    if (stored) sel.value = stored;
+    if (sel.value) loadDashboard();
+  } catch(e) { console.error('Load clients:', e); }
+}
+
+async function loadDashboard() {
+  const clientId = document.getElementById('client-sel').value;
+  if (!clientId) return;
+  localStorage.setItem('fedramp_client', clientId);
+  document.getElementById('last-refreshed').textContent = 'Loading...';
+
+  await Promise.all([
+    loadKSI(clientId),
+    loadOSCAL(clientId),
+    loadFindings(clientId),
+    loadScanners(clientId),
+    loadSIEMs(clientId),
+    loadOAR(clientId),
+  ]);
+  document.getElementById('last-refreshed').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+}
+
+// ── KSI ────────────────────────────────────────────────────────────────────────
+async function loadKSI(clientId) {
+  const grid = document.getElementById('ksi-grid');
+  const badge = document.getElementById('auth-badge-wrap');
+  grid.innerHTML = '<div class="spinner" style="grid-column:1/-1;color:var(--muted);padding:20px;text-align:center"></div>';
+  try {
+    const r = await fetch(`${API}/clients/${clientId}/ksi`, {headers:{Authorization:'Bearer '+getToken()}});
+    if (!r.ok) throw new Error('KSI fetch failed');
+    const data = await r.json();
+    const results = data.results || [];
+    const defs = data.definitions || [];
+    const summary = data.summary || {};
+
+    // Auth status badge
+    const authStatus = summary.authorization_status || 'unknown';
+    badge.innerHTML = `<div class="auth-badge ${authStatus.replace(/-/g,'_').replace('not_authorized','not-authorized')}">
+      ${authStatus === 'authorized' ? '✓' : authStatus === 'not-authorized' ? '✗' : '⚠'} ${authStatus.toUpperCase().replace(/-/g,' ')}
+    </div>`;
+
+    if (results.length === 0) {
+      grid.innerHTML = `
+        <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted)">
+          No KSI results yet. <button class="btn" onclick="triggerKSIValidation()">Run Validation</button>
+        </div>`;
+      return;
+    }
+
+    grid.innerHTML = results.map(r => {
+      const score = Math.round((r.score || 0) * 100);
+      const statusClass = r.status || 'unknown';
+      return `<div class="ksi-card ${statusClass}" title="${esc(JSON.stringify(r.details,null,2))}">
+        <div class="ksi-id">${esc(r.ksi_id)}</div>
+        <div class="ksi-score" style="color:${statusClass==='pass'?'var(--green)':statusClass==='conditional'?'var(--amber)':'var(--red)'}">${score}%</div>
+        <div class="ksi-status ${statusClass}">${esc(r.status||'—').toUpperCase()}</div>
+        <div class="ksi-name">${esc(r.ksi_name)}</div>
+        <div style="font-size:7px;color:var(--muted);margin-top:4px">${(r.validated_at||'').slice(0,10)}</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    grid.innerHTML = `<div class="empty" style="grid-column:1/-1">Error loading KSI data</div>`;
+  }
+}
+
+// ── OSCAL ──────────────────────────────────────────────────────────────────────
+async function loadOSCAL(clientId) {
+  const el = document.getElementById('oscal-section');
+  const grid = document.getElementById('oscal-grid');
+  try {
+    const r = await fetch(`${API}/clients/${clientId}/oscal/summary`, {headers:{Authorization:'Bearer '+getToken()}});
+    if (!r.ok) { el.style.display = 'none'; return; }
+    const data = await r.json();
+    el.style.display = 'block';
+    grid.innerHTML = (data.documents || []).map(doc => `
+      <div class="oscal-card">
+        <div class="oscal-type">${esc(doc.type.toUpperCase())}</div>
+        <div class="oscal-label">${esc(doc.label)}</div>
+        <div class="oscal-count">${doc.count} record${doc.count !== 1 ? 's' : ''}</div>
+        <a href="${esc(doc.url)}?token=${getToken()}" download class="btn primary" style="display:inline-block;text-decoration:none">⬇ ${esc(doc.format.toUpperCase())}</a>
+      </div>
+    `).join('');
+  } catch(e) { el.style.display = 'none'; }
+}
+
+// ── Findings (VDR) ─────────────────────────────────────────────────────────────
+async function loadFindings(clientId) {
+  const statRow = document.getElementById('stat-row');
+  const vdrSection = document.getElementById('vdr-section');
+  const tbody = document.getElementById('vdr-tbody');
+  try {
+    const r = await fetch(`${API}/clients/${clientId}/scan-findings?limit=20`, {headers:{Authorization:'Bearer '+getToken()}});
+    if (!r.ok) { statRow.style.display = 'none'; vdrSection.style.display = 'none'; return; }
+    const data = await r.json();
+    const counts = data.counts || {};
+    const findings = data.findings || [];
+    statRow.style.display = 'grid';
+    document.getElementById('st-total').textContent = data.total || 0;
+    document.getElementById('st-crit').textContent = counts.CRITICAL || 0;
+    document.getElementById('st-high').textContent = counts.HIGH || 0;
+    // Open remediations fetched separately
+    document.getElementById('st-open').textContent = '—';
+
+    vdrSection.style.display = findings.length ? 'block' : 'none';
+    tbody.innerHTML = findings.map(f => `<tr>
+      <td style="color:var(--blue)">${esc(f.cve_id||'—')}</td>
+      <td>${esc((f.title||'').slice(0,60))}</td>
+      <td><span class="status-badge ${(f.severity||'').toLowerCase()}">${esc(f.severity||'—')}</span></td>
+      <td>${f.cvss ? f.cvss.toFixed(1) : '—'}</td>
+      <td style="color:var(--muted)">${esc(f.hostname||f.ip_address||'—')}</td>
+      <td style="font-size:9px;color:var(--muted)">${esc(f.scanner_type||'—')}</td>
+      <td style="font-size:9px;color:var(--muted)">${(f.first_seen||'—').slice(0,10)}</td>
+    </tr>`).join('') || '<tr><td colspan="7" class="empty">No scan findings. Configure a scanner in Admin → Scanners.</td></tr>';
+  } catch(e) { statRow.style.display = 'none'; vdrSection.style.display = 'none'; }
+}
+
+// ── Scanners ───────────────────────────────────────────────────────────────────
+async function loadScanners(clientId) {
+  const el = document.getElementById('scanner-section');
+  const tbody = document.getElementById('scanner-tbody');
+  try {
+    const r = await fetch(`${API}/clients/${clientId}/scanners`, {headers:{Authorization:'Bearer '+getToken()}});
+    if (!r.ok) { el.style.display = 'none'; return; }
+    const data = await r.json();
+    const scanners = data.scanners || [];
+    el.style.display = 'block';
+    tbody.innerHTML = scanners.length ? scanners.map(s => {
+      const statusOk = (s.last_status||'').startsWith('ok');
+      const badgeCls = s.last_status === 'never' ? 'never' : statusOk ? 'ok' : 'error';
+      return `<tr>
+        <td><span style="font-family:var(--mono);font-size:9px;color:var(--teal)">${esc(s.scanner_type)}</span></td>
+        <td>${esc(s.label)}</td>
+        <td><span class="status-badge ${badgeCls}">${esc((s.last_status||'never').slice(0,30))}</span></td>
+        <td style="font-size:9px;color:var(--muted)">${(s.last_polled||'Never').slice(0,16)}</td>
+        <td style="font-size:9px;color:var(--muted)">Every ${s.poll_interval_hours}h</td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="5" class="empty">No scanners. <a href="/admin.html" style="color:var(--teal)">Configure in Admin → Scanners</a>.</td></tr>';
+  } catch(e) { el.style.display = 'none'; }
+}
+
+// ── SIEMs ──────────────────────────────────────────────────────────────────────
+async function loadSIEMs(clientId) {
+  const el = document.getElementById('siem-section');
+  const tbody = document.getElementById('siem-tbody');
+  try {
+    const r = await fetch(`${API}/clients/${clientId}/siems`, {headers:{Authorization:'Bearer '+getToken()}});
+    if (!r.ok) { el.style.display = 'none'; return; }
+    const data = await r.json();
+    const siems = data.siems || [];
+    el.style.display = 'block';
+    tbody.innerHTML = siems.length ? siems.map(s => {
+      const statusOk = (s.last_status||'').startsWith('ok');
+      const badgeCls = s.last_status === 'never' ? 'never' : statusOk ? 'ok' : 'error';
+      return `<tr>
+        <td><span style="font-family:var(--mono);font-size:9px;color:var(--teal)">${esc(s.siem_type)}</span></td>
+        <td>${esc(s.label)}</td>
+        <td><span class="status-badge ${badgeCls}">${esc((s.last_status||'never').slice(0,30))}</span></td>
+        <td style="font-size:9px;color:var(--muted)">${(s.last_polled||'Never').slice(0,16)}</td>
+        <td style="font-size:9px;color:var(--muted)">Every ${s.poll_interval_hours}h</td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="5" class="empty">No SIEMs. <a href="/admin.html" style="color:var(--teal)">Configure in Admin → SIEMs</a>.</td></tr>';
+  } catch(e) { el.style.display = 'none'; }
+}
+
+// ── OAR Preview ────────────────────────────────────────────────────────────────
+async function loadOAR(clientId) {
+  const el = document.getElementById('oar-section');
+  const preview = document.getElementById('oar-preview');
+  try {
+    const r = await fetch(`${API}/clients/${clientId}/oscal/oar.json?token=${getToken()}`);
+    if (!r.ok) { el.style.display = 'none'; return; }
+    const data = await r.json();
+    el.style.display = 'block';
+    const sp = data['security-posture'] || {};
+    const cm = data['continuous-monitoring-activities'] || [];
+    const authDecision = data['authorization-decision'] || 'unknown';
+    preview.innerHTML = `
+      <table style="margin-bottom:12px">
+        <tr><td style="color:var(--muted);width:200px">Authorization Decision</td>
+            <td><span class="status-badge ${authDecision}">${esc(authDecision.toUpperCase())}</span></td></tr>
+        <tr><td style="color:var(--muted)">Security Score</td>
+            <td>${sp.score != null ? sp.score + ' / 100 (' + esc(sp.grade||'?') + ')' : 'Not calculated'}</td></tr>
+        <tr><td style="color:var(--muted)">Open Findings</td><td>${data['open-findings-count'] || 0}</td></tr>
+        <tr><td style="color:var(--muted)">Generated</td><td style="font-size:9px;color:var(--muted)">${(data.metadata?.generated||'').slice(0,19)}</td></tr>
+      </table>
+      <div style="font-size:8px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:8px">Continuous Monitoring Activities</div>
+      <table>${cm.map(a=>`<tr>
+        <td style="color:var(--teal)">${esc(a.activity)}</td>
+        <td style="color:var(--muted)">${esc(a.frequency)}</td>
+      </tr>`).join('')}</table>
+    `;
+  } catch(e) { el.style.display = 'none'; }
+}
+
+// ── Actions ─────────────────────────────────────────────────────────────────────
+async function triggerKSIValidation() {
+  const clientId = document.getElementById('client-sel').value;
+  if (!clientId) { alert('Select a client first'); return; }
+  try {
+    const r = await fetch(`${API}/clients/${clientId}/ksi/validate`, {
+      method:'POST', headers:{Authorization:'Bearer '+getToken()}
+    });
+    if (r.ok) {
+      document.getElementById('last-refreshed').textContent = 'KSI validation running...';
+      setTimeout(() => loadKSI(clientId), 5000);
+    }
+  } catch(e) { console.error(e); }
+}
+
+function downloadBundle() {
+  const clientId = document.getElementById('client-sel').value;
+  if (!clientId) { alert('Select a client first'); return; }
+  window.open(`${API}/clients/${clientId}/oscal/bundle.zip?token=${getToken()}`, '_blank');
+}
+
+loadClients();
+setInterval(() => {
+  const clientId = document.getElementById('client-sel').value;
+  if (clientId) loadDashboard();
+}, 120000); // auto-refresh every 2 minutes
+</script>
+</body>
+</html>
