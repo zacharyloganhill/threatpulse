@@ -3,6 +3,7 @@ ThreatPulse — REST API Routes
 Auto-docs available at http://localhost:8000/docs
 """
 
+import json
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from typing import Optional
 from db import database as db
@@ -26,6 +27,28 @@ async def list_items(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
+    # Resolve client stack profile into SQL-level filters
+    stack_vendors = None
+    stack_products = None
+    if client_id and not exposed_only:
+        client = await db.get_client(client_id)
+        if client:
+            sp = client.get("stack_profile") or {}
+            if isinstance(sp, str):
+                try: sp = json.loads(sp)
+                except: sp = {}
+            raw_vendors  = sp.get("vendors")  or []
+            raw_products = sp.get("products") or []
+            stack_vendors  = [v.lower() for v in raw_vendors]  if raw_vendors  else None
+            stack_products = [p.lower() for p in raw_products] if raw_products else None
+            # Apply min_severity from stack profile (if caller didn't specify severity)
+            if not severity:
+                min_sev = (sp.get("min_severity") or "").upper()
+                if min_sev in ("CRITICAL","HIGH","MEDIUM","LOW","INFO"):
+                    sev_order = ["CRITICAL","HIGH","MEDIUM","LOW","INFO"]
+                    idx = sev_order.index(min_sev)
+                    severity = ",".join(sev_order[:idx+1])
+
     items = await db.get_items(
         severity=severity,
         category=category,
@@ -36,8 +59,10 @@ async def list_items(
         sort=sort,
         limit=limit,
         offset=offset,
+        stack_vendors=stack_vendors,
+        stack_products=stack_products,
     )
-    # Client exposure filter (post-query for simplicity)
+    # Exposure filter (post-query — needs asset match data)
     if client_id and exposed_only:
         exposed_ids = await db.get_exposed_item_ids(client_id)
         items = [i for i in items if i["id"] in exposed_ids]

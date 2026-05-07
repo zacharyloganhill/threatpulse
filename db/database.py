@@ -550,6 +550,8 @@ async def get_items(
     sort: Optional[str] = None,
     limit: int = 200,
     offset: int = 0,
+    stack_vendors: Optional[list] = None,
+    stack_products: Optional[list] = None,
 ) -> list[dict]:
     db = get_db()
     conditions = []
@@ -581,8 +583,18 @@ async def get_items(
         conditions.append("LOWER(compliance_tags) LIKE ?")
         params.append(f"%{tag}%")
     if client_id:
-        # Reserved: filter by client stack profile (applied via apply_stack_filter)
-        pass
+        pass  # client_id filtering handled via stack_vendors/stack_products
+    if stack_vendors or stack_products:
+        parts = []
+        for v in (stack_vendors or []):
+            pct = f"%{v}%"
+            parts.append("(LOWER(vendor) LIKE ? OR LOWER(title) LIKE ? OR LOWER(COALESCE(tags,'')) LIKE ?)")
+            params.extend([pct, pct, pct])
+        for p in (stack_products or []):
+            pct = f"%{p}%"
+            parts.append("(LOWER(product) LIKE ? OR LOWER(title) LIKE ? OR LOWER(COALESCE(tags,'')) LIKE ?)")
+            params.extend([pct, pct, pct])
+        conditions.append("(" + " OR ".join(parts) + ")")
 
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 

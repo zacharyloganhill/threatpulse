@@ -87,6 +87,17 @@ async def preview_client_feed(client_id: str, limit: int = 50, _: dict = Depends
 
 # ── Users ─────────────────────────────────────────────────────────────────────
 
+@router.get("/clients/{client_id}/users", summary="List users for a client")
+async def list_client_users(client_id: str, _: dict = Depends(require_admin)):
+    conn = db.get_db()
+    async with conn.execute(
+        "SELECT id, username, role, client_id, created_at FROM users WHERE client_id = ? ORDER BY created_at",
+        (client_id,)
+    ) as cur:
+        rows = await cur.fetchall()
+    return [dict(r) for r in rows]
+
+
 @router.post("/users", summary="Create a new user")
 async def create_user(req: UserCreate, _: dict = Depends(require_admin)):
     from auth.auth import hash_password

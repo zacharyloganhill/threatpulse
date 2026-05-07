@@ -129,7 +129,7 @@ async function loadClients() {
   try {
     const r = await fetch(API+'/admin/clients', {headers:{'Authorization':'Bearer '+getToken()}});
     if (!r.ok) { document.getElementById('sb-status').textContent='AUTH REQUIRED'; return; }
-    clients = await r.json();
+    clients = (await r.json()).clients || [];
     renderClientList();
     document.getElementById('sb-dot').style.background='var(--green)';
     document.getElementById('sb-status').textContent='● CONNECTED — '+clients.length+' clients';
@@ -442,8 +442,51 @@ async function loadUsersTab() {
         `).join('') : '<tr><td colspan="3" class="empty">No users for this client</td></tr>'}
         </tbody>
       </table>
+      <div style="margin-top:16px;border:1px solid var(--border);padding:14px">
+        <div class="section-header" style="margin-top:0">Create Login</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end">
+          <label style="font-size:9px;color:var(--muted);display:block">Username
+            <input id="nu-username" type="text" placeholder="client_username" class="finput" style="margin-top:4px">
+          </label>
+          <label style="font-size:9px;color:var(--muted);display:block">Password
+            <input id="nu-password" type="text" placeholder="auto-generated" class="finput" style="margin-top:4px">
+          </label>
+          <label style="font-size:9px;color:var(--muted);display:block">Role
+            <select id="nu-role" class="finput" style="margin-top:4px;cursor:pointer">
+              <option value="client">client</option>
+              <option value="analyst">analyst</option>
+            </select>
+          </label>
+          <button class="btn primary" onclick="createClientUser()">+ Create</button>
+        </div>
+        <div id="nu-result" style="margin-top:8px;font-size:9px;color:var(--teal);display:none"></div>
+      </div>
     `;
+    // Auto-generate a password suggestion
+    document.getElementById('nu-password').value = Math.random().toString(36).slice(2,10) + Math.random().toString(36).slice(2,6).toUpperCase();
   } catch(e) { el.innerHTML = '<div class="empty">Error loading users</div>'; }
+}
+
+async function createClientUser() {
+  const username = document.getElementById('nu-username').value.trim();
+  const password = document.getElementById('nu-password').value.trim();
+  const role     = document.getElementById('nu-role').value;
+  if (!username) { toast('Username required', 'error'); return; }
+  if (!password) { toast('Password required', 'error'); return; }
+  try {
+    const r = await fetch(`${API}/admin/users`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','Authorization':'Bearer '+getToken()},
+      body: JSON.stringify({username, password, role, client_id: selectedClient.id}),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Error');
+    const res = document.getElementById('nu-result');
+    res.style.display = 'block';
+    res.textContent = `Created: ${username} / ${password}  (copy these credentials — password not stored in plaintext)`;
+    toast('User created', 'success');
+    loadUsersTab();
+  } catch(e) { toast('Error: '+e.message, 'error'); }
 }
 
 // ── New client form ────────────────────────────────────────────────────────────

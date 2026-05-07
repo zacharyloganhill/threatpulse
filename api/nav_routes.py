@@ -65,7 +65,7 @@ async def ksi_summary(user=Depends(get_current_user)):
 
 
 
-@router.get("/clients/{client_id}/metrics", summary="Per-client security metrics")
+@router.get("/clients/{client_id}/security-summary", summary="Per-client security posture summary")
 async def client_metrics(client_id: str, user=Depends(get_current_user)):
     client = await db.get_client(client_id)
     if not client:

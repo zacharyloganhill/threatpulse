@@ -198,8 +198,10 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
 </div>
 
 <script>
-const TOKEN = localStorage.getItem('token');
-const ROLE  = localStorage.getItem('role') || '';
+const TOKEN     = localStorage.getItem('token');
+const ROLE      = localStorage.getItem('role') || '';
+const CLIENT_ID = localStorage.getItem('client_id') || '';
+const IS_CLIENT = (ROLE === 'client' || ROLE === 'analyst') && CLIENT_ID;
 
 function authHdr() {
   return {Authorization: 'Bearer ' + TOKEN};
@@ -337,11 +339,86 @@ if (ROLE === 'admin' || ROLE === 'superadmin') {
   if (t) t.style.display = '';
 }
 
-loadStats();
-loadScanners();
-loadSiems();
-loadKSI();
-loadNotifications();
+// ── Client view ──────────────────────────────────────────────────────────────
+
+async function loadClientView() {
+  // Update page subtitle
+  const name = localStorage.getItem('display_name') || 'Client';
+  try {
+    const res = await fetch(`/api/v1/clients/${CLIENT_ID}/security-summary`, {headers: authHdr()});
+    if (!res.ok) throw new Error('metrics failed');
+    const d = await res.json();
+    const sf = d.scan_findings || {};
+    const ksi = d.ksi || {};
+    const ksiPct = ksi.total ? Math.round(100 * ksi.passing / ksi.total) : 0;
+    document.getElementById('statRow').innerHTML = [
+      {label:'Critical Findings', val: sf.CRITICAL||0, cls:'cr'},
+      {label:'High Findings',     val: sf.HIGH||0,     cls:'hi'},
+      {label:'Medium Findings',   val: sf.MEDIUM||0,   cls:'me'},
+      {label:'KSI Pass Rate',     val: ksiPct+'%',     cls:'te'},
+      {label:'Open Remediations', val: d.open_remediations||0, cls:''},
+      {label:'Dark Web Alerts',   val: '—',            cls:''},
+    ].map(c => `<div class="stat-chip"><div class="stat-chip-label">${c.label}</div><div class="stat-chip-val ${c.cls}">${c.val}</div></div>`).join('');
+
+    // Scanners card → client scan findings
+    document.getElementById('scannersBadge').textContent = `${d.scanners} CONFIG`;
+    document.getElementById('scannersBadge').className = 'status-card-badge ' + (d.scanners > 0 ? 'ok' : 'muted');
+    document.querySelector('#scannersStatus').closest('.status-card').querySelector('.status-card-title').textContent = 'Scan Findings';
+    document.getElementById('scannersStatus').innerHTML = Object.entries(sf).length
+      ? Object.entries(sf).map(([sev,cnt]) => `<div class="status-item"><span class="status-item-name">${sev}</span><span class="status-item-val">${cnt}</span></div>`).join('')
+      : '<div class="status-empty">No scan findings</div>';
+
+    // SIEMs card → remediation
+    document.getElementById('siemsBadge').textContent = `${d.open_remediations} OPEN`;
+    document.getElementById('siemsBadge').className = 'status-card-badge ' + (d.open_remediations > 0 ? 'warn' : 'ok');
+    document.querySelector('#siemsStatus').closest('.status-card').querySelector('.status-card-title').textContent = 'Remediation';
+    document.getElementById('siemsStatus').innerHTML = `
+      <div class="status-item"><span class="status-item-name">Open Items</span><span class="status-item-val">${d.open_remediations||0}</span></div>
+      <div class="status-item"><span class="status-item-name">KSI Passing</span><span class="status-item-val">${ksi.passing||0}/${ksi.total||0}</span></div>
+      <div class="status-item"><span class="status-item-name">Scanners Active</span><span class="status-item-val">${d.scanners||0}</span></div>
+    `;
+
+    // KSI card — per-client
+    document.getElementById('ksiOverallBadge').textContent = `${ksiPct}%`;
+    document.getElementById('ksiOverallBadge').className = 'status-card-badge ' + (ksiPct >= 80 ? 'ok' : ksiPct >= 60 ? 'warn' : 'err');
+    document.getElementById('ksiStatus').innerHTML = ksi.total
+      ? `<div class="status-item"><span class="status-item-name">Passing</span><span class="status-item-val" style="color:var(--green)">${ksi.passing}</span></div>
+         <div class="status-item"><span class="status-item-name">Failing</span><span class="status-item-val" style="color:var(--red)">${ksi.failing}</span></div>
+         <div class="status-item"><span class="status-item-name">Total KSIs</span><span class="status-item-val">${ksi.total}</span></div>`
+      : '<div class="status-empty">No KSI data yet — run validation in FedRAMP dashboard</div>';
+  } catch(e) {
+    document.getElementById('statRow').innerHTML = '<div class="stat-chip"><div class="stat-chip-label">Status</div><div class="stat-chip-val" style="font-size:12px">Error loading metrics</div></div>';
+  }
+
+  // Load dark web alerts count for this client
+  try {
+    const dwr = await fetch(`/api/v1/darkweb/alerts?client_id=${CLIENT_ID}&unacknowledged_only=true&limit=1`, {headers: authHdr()});
+    if (dwr.ok) {
+      const dwd = await dwr.json();
+      const chips = document.querySelectorAll('.stat-chip');
+      if (chips.length >= 6) {
+        chips[5].querySelector('.stat-chip-val').textContent = dwd.total || dwd.count || 0;
+        if ((dwd.total || dwd.count || 0) > 0) chips[5].querySelector('.stat-chip-val').style.color = 'var(--red)';
+      }
+      if ((dwd.total || dwd.count || 0) > 0) {
+        const b = document.getElementById('darkwebBadge');
+        if (b) { b.style.display = ''; b.textContent = (dwd.total||dwd.count||0) + ' UNACK'; }
+      }
+    }
+  } catch(e) {}
+
+  loadNotifications();
+}
+
+if (IS_CLIENT) {
+  loadClientView();
+} else {
+  loadStats();
+  loadScanners();
+  loadSiems();
+  loadKSI();
+  loadNotifications();
+}
 </script>
 
 <script src="/nav-component.js"></script>
