@@ -373,6 +373,19 @@ function renderExportTab() {
         </select>
         <button class="btn sm primary" onclick="downloadClientReport('${id}')">⬇ PDF</button>
       </div>
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--bg3);border:1px solid rgba(0,212,170,0.2)">
+        <span style="flex:1;font-size:10px;color:var(--teal)">Executive Briefing Deck</span>
+        <span style="font-size:9px;color:var(--muted)">12-slide PPTX with AI summaries + charts</span>
+        <select id="deck-days-admin" style="font-family:var(--mono);font-size:8px;background:var(--bg4);border:1px solid var(--border);color:var(--text);padding:3px 6px;outline:none">
+          <option value="7">7 days</option><option value="30" selected>30 days</option><option value="60">60 days</option><option value="90">90 days</option>
+        </select>
+        <button class="btn sm" onclick="previewDeck('${id}')">Preview</button>
+        <button class="btn sm primary" onclick="downloadDeck('${id}')">⬇ PPTX</button>
+      </div>
+    </div>
+    <div id="deck-preview-panel" style="display:none;margin-top:16px">
+      <div class="section-header">Deck Preview</div>
+      <div id="deck-slides-list" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px"></div>
     </div>
   `;
 }
@@ -380,6 +393,36 @@ function renderExportTab() {
 function downloadClientReport(clientId) {
   const days = document.getElementById('rpt-days-admin').value;
   window.open(`${API}/admin/clients/${clientId}/report.pdf?days=${days}`, '_blank');
+}
+
+function downloadDeck(clientId) {
+  const days = document.getElementById('deck-days-admin')?.value || 30;
+  const token = getToken();
+  window.open(`${API}/clients/${clientId}/deck.pptx?days=${days}&token=${token}`, '_blank');
+}
+
+async function previewDeck(clientId) {
+  const days = document.getElementById('deck-days-admin')?.value || 30;
+  const panel = document.getElementById('deck-preview-panel');
+  const list = document.getElementById('deck-slides-list');
+  list.innerHTML = '<span class="spinner"></span>';
+  panel.style.display = 'block';
+  try {
+    const r = await fetch(`${API}/clients/${clientId}/deck-preview?days=${days}`, {
+      headers: {'Authorization': 'Bearer '+getToken()}
+    });
+    if (!r.ok) throw new Error('Preview failed');
+    const data = await r.json();
+    list.innerHTML = data.slides.map(s => `
+      <div style="background:var(--bg4);border:1px solid var(--border);padding:10px;border-radius:2px">
+        <div style="font-size:8px;color:var(--teal);margin-bottom:4px">SLIDE ${s.slide}</div>
+        <div style="font-size:9px;font-weight:700;margin-bottom:4px">${esc(s.title)}</div>
+        <div style="font-size:8px;color:var(--muted)">${esc(s.content)}</div>
+      </div>
+    `).join('');
+  } catch(e) {
+    list.innerHTML = `<div class="empty" style="grid-column:1/-1">Preview failed: ${e.message}</div>`;
+  }
 }
 
 // ── Users tab ──────────────────────────────────────────────────────────────────

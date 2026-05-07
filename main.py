@@ -38,6 +38,7 @@ from api.export_routes import router as export_router
 from api.darkweb_routes import router as darkweb_router
 from api.actor_routes import router as actor_router
 from api.misp_routes import router as misp_router
+from api.deck_routes import router as deck_router
 
 console = Console()
 
@@ -127,6 +128,7 @@ app.include_router(export_router, prefix="/api/v1", tags=["Export"])
 app.include_router(darkweb_router, prefix="/api/v1", tags=["Dark Web"])
 app.include_router(actor_router, prefix="/api/v1", tags=["Threat Actors"])
 app.include_router(misp_router, prefix="/api/v1", tags=["MISP"])
+app.include_router(deck_router, prefix="/api/v1", tags=["Briefing Deck"])
 
 
 @app.api_route("/api/ollama/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)

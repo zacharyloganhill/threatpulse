@@ -21,3 +21,7 @@ stix2>=3.0.0
 # File uploads
 python-multipart>=0.0.9
 openpyxl>=3.1.0
+# Briefing deck generation
+python-pptx>=0.6.23
+matplotlib>=3.8.0
+Pillow>=10.0.0
