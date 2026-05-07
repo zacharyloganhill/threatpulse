@@ -69,23 +69,9 @@ label{font-size:8px;color:var(--muted);display:block;margin-bottom:2px;letter-sp
 .toast.success{border-color:rgba(61,214,140,.4)}.toast.error{border-color:rgba(240,89,90,.4)}
 </style>
 </head>
-<body>
+<body data-page-title="SUPPLY CHAIN" data-back-url="/index.html">
 <div class="shell">
-<div class="topbar">
-  <div class="logo-pulse"></div>
-  <div class="logo-text">PHANTOMFEED</div>
-  <div class="page-title">SUPPLY CHAIN RISK GRAPH</div>
-  <nav class="topnav">
-    <a class="tnav" href="dashboard.html">DASHBOARD</a>
-    <a class="tnav" href="analytics.html">ANALYTICS</a>
-    <a class="tnav" href="actors.html">ACTORS</a>
-    <a class="tnav" href="cmmc.html">CMMC</a>
-    <a class="tnav active" href="supplychain.html">SUPPLY CHAIN</a>
-    <a class="tnav" href="fedramp.html">FEDRAMP 20x</a>
-    <a class="tnav" href="upload.html">UPLOAD</a>
-    <a class="tnav" href="admin.html">ADMIN</a>
-  </nav>
-</div>
+<div class="topbar"></div>
 
 <div class="layout">
   <!-- Sidebar -->
@@ -440,5 +426,6 @@ function renderGraph(data) {
 
 loadClients();
 </script>
+<script src="/nav-component.js"></script>
 </body>
 </html>

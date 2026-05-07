@@ -669,6 +669,35 @@ async def get_stats() -> dict:
     async with db.execute("SELECT MAX(fetched_at) as last FROM threat_items") as cur:
         stats["last_ingested"] = (await cur.fetchone())["last"]
 
+    # Client count
+    async with db.execute("SELECT COUNT(*) as cnt FROM clients") as cur:
+        stats["client_count"] = (await cur.fetchone())["cnt"]
+
+    # Scanner count
+    async with db.execute("SELECT COUNT(*) as cnt FROM scanner_configs WHERE is_active=1") as cur:
+        stats["scanner_count"] = (await cur.fetchone())["cnt"]
+
+    # Dark web alert count (unacknowledged)
+    try:
+        async with db.execute(
+            "SELECT COUNT(*) as cnt FROM darkweb_alerts WHERE acknowledged=0"
+        ) as cur:
+            stats["darkweb_alert_count"] = (await cur.fetchone())["cnt"]
+    except Exception:
+        stats["darkweb_alert_count"] = 0
+
+    # KSI pass rate (average across all latest results)
+    try:
+        async with db.execute(
+            "SELECT AVG(score) as avg FROM ksi_results WHERE id IN ("
+            "  SELECT MAX(id) FROM ksi_results GROUP BY client_id, ksi_id"
+            ")"
+        ) as cur:
+            row = await cur.fetchone()
+            stats["ksi_pass_rate"] = round(row["avg"], 3) if row["avg"] is not None else None
+    except Exception:
+        stats["ksi_pass_rate"] = None
+
     return stats
 
 

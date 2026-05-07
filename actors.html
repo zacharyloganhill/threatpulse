@@ -74,20 +74,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .tactic-count.has-techniques{color:var(--amber)}
 </style>
 </head>
-<body>
-<div class="topbar">
-  <a class="topbar-brand" href="/">PHANTOM<span style="color:#fff">FEED</span></a>
-  <div class="topbar-nav">
-    <a href="dashboard.html">Feed</a>
-    <a href="analytics.html">Analytics</a>
-    <a href="actors.html" class="active">Actors</a>
-    <a href="cmmc.html">CMMC</a>
-    <a href="supplychain.html">Supply Chain</a>
-    <a href="fedramp.html">FedRAMP 20x</a>
-    <a href="upload.html">Upload</a>
-    <a href="admin.html">Admin</a>
-  </div>
-</div>
+<body data-page-title="THREAT ACTORS" data-back-url="/index.html">
+<div class="topbar"></div>
 
 <div class="layout">
   <div class="sidebar">
@@ -310,5 +298,6 @@ function renderDossier(actor, items) {
 
 loadActors();
 </script>
+<script src="/nav-component.js"></script>
 </body>
 </html>

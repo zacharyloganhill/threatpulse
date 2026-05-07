@@ -51,24 +51,9 @@ select:focus{border-color:var(--teal)}
 body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px)}
 </style>
 </head>
-<body>
+<body data-page-title="ANALYTICS" data-back-url="/index.html">
 
-<div class="topbar">
-  <span class="logo">PHANTOMFEED</span>
-  <div class="vsep"></div>
-  <a href="/dashboard.html" class="tbtn">FEED</a>
-  <a href="/analytics.html" class="tbtn on">ANALYTICS</a>
-  <a href="/actors.html" class="tbtn">ACTORS</a>
-  <a href="/cmmc.html" class="tbtn">CMMC</a>
-  <a href="/supplychain.html" class="tbtn">SUPPLY CHAIN</a>
-  <a href="/fedramp.html" class="tbtn">FEDRAMP 20x</a>
-  <a href="/upload.html" class="tbtn">UPLOAD</a>
-  <a href="/admin.html" class="tbtn">ADMIN</a>
-  <div class="spacer"></div>
-  <button class="tbtn" onclick="exportCharts()">⬇ CHARTS</button>
-  <button class="tbtn" onclick="exportAnalyticsReport()">⬇ REPORT</button>
-  <span style="font-size:9px;color:var(--muted)" id="last-updated">—</span>
-</div>
+<div class="topbar"></div>
 
 <div class="controls">
   <span class="ctrl-lbl">CLIENT</span>
@@ -416,5 +401,6 @@ function exportAnalyticsReport() {
   await loadAll();
 })();
 </script>
+<script src="/nav-component.js"></script>
 </body>
 </html>

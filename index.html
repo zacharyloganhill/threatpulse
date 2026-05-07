@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ThreatPulse — Mission Control</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080a0d;--bg2:#0c0f14;--bg3:#111620;--bg4:#161c28;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#c9d4e3;--muted:#4e5d72;--dim:#1e2836;
+  --teal:#00d4aa;--teal-d:rgba(0,212,170,0.08);--teal-m:rgba(0,212,170,0.15);
+  --red:#f0595a;--red-d:rgba(240,89,90,0.1);
+  --amber:#e8a530;--amber-d:rgba(232,165,48,0.1);
+  --blue:#4d9de0;--blue-d:rgba(77,157,224,0.1);
+  --purple:#9b8ef5;--green:#3dd68c;
+  --mono:'JetBrains Mono',monospace;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:12px;overflow-y:auto}
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#1e2836}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px)}
+
+/* Topbar */
+.topbar{display:flex;align-items:center;gap:12px;padding:0 20px;height:44px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+
+/* Main */
+.main{padding:24px 28px;max-width:1400px;margin:0 auto}
+
+/* Stat chips */
+.stat-row{display:flex;gap:10px;margin-bottom:28px;flex-wrap:wrap}
+.stat-chip{display:flex;flex-direction:column;gap:3px;padding:12px 18px;background:var(--bg2);border:1px solid var(--border);min-width:110px;flex:1;cursor:default;transition:border-color .15s}
+.stat-chip:hover{border-color:var(--border2)}
+.stat-chip-label{font-size:7px;letter-spacing:2px;color:var(--muted);text-transform:uppercase}
+.stat-chip-val{font-size:20px;font-weight:700;color:var(--text)}
+.stat-chip-val.cr{color:var(--red)}.stat-chip-val.hi{color:var(--amber)}.stat-chip-val.me{color:var(--blue)}.stat-chip-val.te{color:var(--teal)}.stat-chip-val.gr{color:var(--green)}
+
+/* Section headers */
+.section-hdr{font-size:8px;letter-spacing:3px;color:var(--teal);text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:10px}
+.section-hdr::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* Nav tiles */
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:32px}
+.tile{display:flex;flex-direction:column;gap:6px;padding:18px 20px;background:var(--bg2);border:1px solid var(--border);text-decoration:none;color:var(--text);transition:all .15s;cursor:pointer}
+.tile:hover{border-color:var(--teal);background:var(--teal-d)}
+.tile-ico{font-size:18px;margin-bottom:2px}
+.tile-name{font-size:11px;font-weight:600;letter-spacing:1px}
+.tile-desc{font-size:8px;color:var(--muted);line-height:1.6}
+.tile-badge{margin-top:4px;font-size:7px;letter-spacing:1px;padding:2px 6px;border:1px solid;align-self:flex-start}
+.tile-badge.live{border-color:rgba(61,214,140,.4);color:var(--green)}
+.tile-badge.warn{border-color:rgba(232,165,48,.4);color:var(--amber)}
+.tile-badge.ok{border-color:rgba(0,212,170,.4);color:var(--teal)}
+.tile-badge.admin{border-color:rgba(155,142,245,.4);color:var(--purple)}
+
+/* Status cards */
+.status-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:32px}
+.status-card{background:var(--bg2);border:1px solid var(--border);padding:16px}
+.status-card-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.status-card-title{font-size:8px;letter-spacing:2px;color:var(--muted);text-transform:uppercase}
+.status-card-badge{font-size:7px;letter-spacing:1px;padding:2px 7px;border:1px solid}
+.status-card-badge.ok{border-color:rgba(61,214,140,.4);color:var(--green)}
+.status-card-badge.warn{border-color:rgba(232,165,48,.4);color:var(--amber)}
+.status-card-badge.err{border-color:rgba(240,89,90,.4);color:var(--red)}
+.status-card-badge.muted{border-color:var(--border);color:var(--muted)}
+.status-item{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:9px}
+.status-item:last-child{border-bottom:none}
+.status-item-name{color:var(--muted)}
+.status-item-val{color:var(--text)}
+.status-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.status-dot.ok{background:var(--green)}
+.status-dot.warn{background:var(--amber)}
+.status-dot.err{background:var(--red)}
+.status-dot.off{background:var(--muted)}
+.status-empty{font-size:9px;color:var(--muted);text-align:center;padding:12px 0}
+
+/* Notifications */
+.notif-list{display:flex;flex-direction:column;gap:6px;margin-bottom:28px}
+.notif-item{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--border)}
+.notif-item.cr{border-left-color:var(--red)}
+.notif-item.hi{border-left-color:var(--amber)}
+.notif-item.ok{border-left-color:var(--teal)}
+.notif-body{flex:1}
+.notif-title{font-size:10px;color:var(--text);margin-bottom:3px}
+.notif-meta{font-size:8px;color:var(--muted)}
+
+.skel{background:var(--bg3);animation:shim 1.4s ease-in-out infinite;border-radius:2px}
+@keyframes shim{0%,100%{opacity:.3}50%{opacity:.8}}
+</style>
+</head>
+<body data-page-title="MISSION CONTROL">
+
+<div class="topbar"></div>
+
+<div class="main">
+
+  <!-- Stat chips -->
+  <div class="stat-row" id="statRow">
+    <div class="stat-chip"><div class="stat-chip-label">Critical</div><div class="stat-chip-val cr skel" style="height:24px;width:40px"></div></div>
+    <div class="stat-chip"><div class="stat-chip-label">High</div><div class="stat-chip-val hi skel" style="height:24px;width:40px"></div></div>
+    <div class="stat-chip"><div class="stat-chip-label">Medium</div><div class="stat-chip-val me skel" style="height:24px;width:40px"></div></div>
+    <div class="stat-chip"><div class="stat-chip-label">New Items</div><div class="stat-chip-val te skel" style="height:24px;width:40px"></div></div>
+    <div class="stat-chip"><div class="stat-chip-label">Total Feed</div><div class="stat-chip-val skel" style="height:24px;width:60px"></div></div>
+    <div class="stat-chip"><div class="stat-chip-label">Clients</div><div class="stat-chip-val gr skel" style="height:24px;width:30px"></div></div>
+  </div>
+
+  <!-- Navigation tiles -->
+  <div class="section-hdr">Navigation</div>
+  <div class="tiles">
+    <a class="tile" href="/dashboard.html">
+      <div class="tile-ico">&#9632;</div>
+      <div class="tile-name">FEED</div>
+      <div class="tile-desc">Real-time threat intelligence from 27 sources including KEV, CVEs, advisories, and supply chain</div>
+      <div class="tile-badge live">LIVE</div>
+    </a>
+    <a class="tile" href="/analytics.html">
+      <div class="tile-ico">&#9650;</div>
+      <div class="tile-name">ANALYTICS</div>
+      <div class="tile-desc">Trend analysis, CVSS distributions, feed breakdowns, and risk scoring charts</div>
+    </a>
+    <a class="tile" href="/actors.html">
+      <div class="tile-ico">&#9632;</div>
+      <div class="tile-name">THREAT ACTORS</div>
+      <div class="tile-desc">Dossiers on 55+ tracked APT groups, nation-state actors, and cybercriminal organizations</div>
+    </a>
+    <a class="tile" href="/cmmc.html">
+      <div class="tile-ico">&#9670;</div>
+      <div class="tile-name">CMMC 2.0</div>
+      <div class="tile-desc">CMMC gap assessment, control mapping, and evidence collection for DIB compliance</div>
+    </a>
+    <a class="tile" href="/supplychain.html">
+      <div class="tile-ico">&#9632;</div>
+      <div class="tile-name">SUPPLY CHAIN</div>
+      <div class="tile-desc">Vendor risk graph, dependency monitoring, and third-party exposure analysis</div>
+    </a>
+    <a class="tile" href="/fedramp.html">
+      <div class="tile-ico">&#9679;</div>
+      <div class="tile-name">FEDRAMP 20x</div>
+      <div class="tile-desc">KSI validation, OSCAL document generation, scanner integration, and continuous authorization</div>
+      <div class="tile-badge ok" id="ksiBadge">LOADING...</div>
+    </a>
+    <a class="tile" href="/upload.html">
+      <div class="tile-ico">&#9650;</div>
+      <div class="tile-name">UPLOAD</div>
+      <div class="tile-desc">Import scan reports (Nessus, Qualys, Rapid7) and intelligence feeds for client ingestion</div>
+    </a>
+    <a class="tile" href="/admin.html" id="adminTile" style="display:none">
+      <div class="tile-ico">&#9670;</div>
+      <div class="tile-name">ADMIN</div>
+      <div class="tile-desc">Client management, user accounts, system configuration, and audit log review</div>
+      <div class="tile-badge admin">ADMIN ONLY</div>
+    </a>
+  </div>
+
+  <!-- Platform Status -->
+  <div class="section-hdr">Platform Status</div>
+  <div class="status-grid">
+    <!-- Scanner Status -->
+    <div class="status-card">
+      <div class="status-card-hdr">
+        <span class="status-card-title">Scanners</span>
+        <span class="status-card-badge muted" id="scannersBadge">—</span>
+      </div>
+      <div id="scannersStatus"><div class="status-empty">Loading...</div></div>
+    </div>
+
+    <!-- SIEM Status -->
+    <div class="status-card">
+      <div class="status-card-hdr">
+        <span class="status-card-title">SIEMs</span>
+        <span class="status-card-badge muted" id="siemsBadge">—</span>
+      </div>
+      <div id="siemsStatus"><div class="status-empty">Loading...</div></div>
+    </div>
+
+    <!-- KSI Summary -->
+    <div class="status-card">
+      <div class="status-card-hdr">
+        <span class="status-card-title">KSI Health</span>
+        <span class="status-card-badge muted" id="ksiOverallBadge">—</span>
+      </div>
+      <div id="ksiStatus"><div class="status-empty">Loading...</div></div>
+    </div>
+  </div>
+
+  <!-- Recent Notifications -->
+  <div class="section-hdr">Recent Activity</div>
+  <div id="notifList" class="notif-list">
+    <div class="notif-item"><div class="notif-body"><div class="notif-title skel" style="height:12px;width:70%;margin-bottom:4px"></div><div class="notif-meta skel" style="height:8px;width:40%"></div></div></div>
+  </div>
+
+</div>
+
+<script>
+const TOKEN = localStorage.getItem('token');
+const ROLE  = localStorage.getItem('role') || '';
+
+function authHdr() {
+  return {Authorization: 'Bearer ' + TOKEN};
+}
+
+async function loadStats() {
+  try {
+    const res = await fetch('/api/v1/stats', {headers: authHdr()});
+    if (!res.ok) return;
+    const d = await res.json();
+    const sev = d.by_severity || {};
+    const chips = [
+      {label:'Critical', val: sev.CRITICAL||0, cls:'cr'},
+      {label:'High',     val: sev.HIGH||0,     cls:'hi'},
+      {label:'Medium',   val: sev.MEDIUM||0,   cls:'me'},
+      {label:'New Items',val: d.new_count||0,   cls:'te'},
+      {label:'Total Feed',val: d.total||0,      cls:''},
+      {label:'Clients',  val: d.client_count||0,cls:'gr'},
+    ];
+    document.getElementById('statRow').innerHTML = chips.map(c =>
+      `<div class="stat-chip"><div class="stat-chip-label">${c.label}</div><div class="stat-chip-val ${c.cls}">${Number(c.val).toLocaleString()}</div></div>`
+    ).join('');
+  } catch (e) { console.error('stats', e); }
+}
+
+async function loadScanners() {
+  try {
+    const res = await fetch('/api/v1/scanners/status', {headers: authHdr()});
+    if (!res.ok) throw new Error();
+    const d = await res.json();
+    const items = d.scanners || [];
+    const el = document.getElementById('scannersStatus');
+    const badge = document.getElementById('scannersBadge');
+    const active = items.filter(s => s.is_active).length;
+    badge.textContent = `${active} ACTIVE`;
+    badge.className = 'status-card-badge ' + (active > 0 ? 'ok' : 'muted');
+    if (!items.length) { el.innerHTML = '<div class="status-empty">No scanners configured</div>'; return; }
+    el.innerHTML = items.map(s => {
+      const ok = s.last_status && s.last_status.startsWith('ok');
+      const dot = ok ? 'ok' : (s.last_status === 'never' ? 'off' : 'err');
+      return `<div class="status-item"><div style="display:flex;align-items:center;gap:7px"><div class="status-dot ${dot}"></div><span class="status-item-name">${esc(s.label||s.scanner_type)}</span></div><span class="status-item-val" style="font-size:8px">${esc(s.last_status||'—')}</span></div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('scannersStatus').innerHTML = '<div class="status-empty">Unavailable</div>';
+  }
+}
+
+async function loadSiems() {
+  try {
+    const res = await fetch('/api/v1/siems/status', {headers: authHdr()});
+    if (!res.ok) throw new Error();
+    const d = await res.json();
+    const items = d.siems || [];
+    const el = document.getElementById('siemsStatus');
+    const badge = document.getElementById('siemsBadge');
+    const active = items.filter(s => s.is_active).length;
+    badge.textContent = `${active} ACTIVE`;
+    badge.className = 'status-card-badge ' + (active > 0 ? 'ok' : 'muted');
+    if (!items.length) { el.innerHTML = '<div class="status-empty">No SIEMs configured</div>'; return; }
+    el.innerHTML = items.map(s => {
+      const ok = s.last_status && s.last_status.startsWith('ok');
+      const dot = ok ? 'ok' : (s.last_status === 'never' ? 'off' : 'err');
+      return `<div class="status-item"><div style="display:flex;align-items:center;gap:7px"><div class="status-dot ${dot}"></div><span class="status-item-name">${esc(s.label||s.siem_type)}</span></div><span class="status-item-val" style="font-size:8px">${esc(s.last_status||'—')}</span></div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('siemsStatus').innerHTML = '<div class="status-empty">Unavailable</div>';
+  }
+}
+
+async function loadKSI() {
+  try {
+    const res = await fetch('/api/v1/ksi/summary', {headers: authHdr()});
+    if (!res.ok) throw new Error();
+    const d = await res.json();
+    const clients = d.clients || [];
+    const el = document.getElementById('ksiStatus');
+    const badge = document.getElementById('ksiOverallBadge');
+    const ksiBadge = document.getElementById('ksiBadge');
+
+    if (!clients.length) {
+      el.innerHTML = '<div class="status-empty">No KSI data yet</div>';
+      badge.textContent = 'NO DATA';
+      ksiBadge.textContent = 'NO DATA';
+      return;
+    }
+    let totalPass = 0, total = 0;
+    clients.forEach(c => { totalPass += (c.passing||0); total += (c.total_ksis||0); });
+    const pct = total > 0 ? Math.round(100 * totalPass / total) : 0;
+    badge.textContent = `${pct}% PASS`;
+    badge.className = 'status-card-badge ' + (pct >= 80 ? 'ok' : pct >= 50 ? 'warn' : 'err');
+    ksiBadge.textContent = `${pct}% KSI`;
+    ksiBadge.className = 'tile-badge ' + (pct >= 80 ? 'ok' : 'warn');
+
+    el.innerHTML = clients.slice(0,5).map(c =>
+      `<div class="status-item"><span class="status-item-name">${esc(c.client_name||c.client_id.slice(0,8))}</span><span class="status-item-val" style="color:${c.passing===c.total_ksis?'var(--green)':'var(--amber)'}">${c.passing||0}/${c.total_ksis||0}</span></div>`
+    ).join('');
+  } catch(e) {
+    document.getElementById('ksiStatus').innerHTML = '<div class="status-empty">Unavailable</div>';
+    document.getElementById('ksiBadge').textContent = '—';
+  }
+}
+
+async function loadNotifications() {
+  try {
+    const res = await fetch('/api/v1/notifications', {headers: authHdr()});
+    if (!res.ok) throw new Error();
+    const d = await res.json();
+    const items = d.notifications || [];
+    const el = document.getElementById('notifList');
+    if (!items.length) {
+      el.innerHTML = '<div class="notif-item ok"><div class="notif-body"><div class="notif-title">All systems nominal</div><div class="notif-meta">No recent alerts</div></div></div>';
+      return;
+    }
+    el.innerHTML = items.map(n => {
+      const cls = n.severity === 'CRITICAL' ? 'cr' : n.severity === 'HIGH' ? 'hi' : 'ok';
+      return `<div class="notif-item ${cls}"><div class="notif-body"><div class="notif-title">${esc(n.title)}</div><div class="notif-meta">${esc(n.source||'')} &nbsp;·&nbsp; ${esc(n.ts||'')}</div></div></div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('notifList').innerHTML = '<div class="notif-item"><div class="notif-body"><div class="notif-title">Activity feed unavailable</div></div></div>';
+  }
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Show admin tile if admin role
+if (ROLE === 'admin' || ROLE === 'superadmin') {
+  const t = document.getElementById('adminTile');
+  if (t) t.style.display = '';
+}
+
+loadStats();
+loadScanners();
+loadSiems();
+loadKSI();
+loadNotifications();
+</script>
+
+<script src="/nav-component.js"></script>
+</body>
+</html>

@@ -212,25 +212,10 @@ tr:hover td{background:rgba(255,255,255,.02)}
 @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
-<body>
+<body data-page-title="UPLOAD CENTER" data-back-url="/index.html">
 <div class="shell">
 
-<!-- Topbar -->
-<div class="topbar">
-  <div class="logo-pulse"></div>
-  <div class="logo-text">PHANTOMFEED</div>
-  <div class="page-title">UPLOAD CENTER</div>
-  <nav class="topnav">
-    <a class="tnav" href="dashboard.html">DASHBOARD</a>
-    <a class="tnav" href="analytics.html">ANALYTICS</a>
-    <a class="tnav" href="actors.html">ACTORS</a>
-    <a class="tnav" href="cmmc.html">CMMC</a>
-    <a class="tnav" href="supplychain.html">SUPPLY CHAIN</a>
-    <a class="tnav" href="fedramp.html">FEDRAMP 20x</a>
-    <a class="tnav active" href="upload.html">UPLOAD</a>
-    <a class="tnav" href="admin.html">ADMIN</a>
-  </nav>
-</div>
+<div class="topbar"></div>
 
 <!-- Main Content -->
 <div class="content">
@@ -1163,5 +1148,6 @@ function toggleExpand(id) {
 loadClients();
 histFilter('');
 </script>
+<script src="/nav-component.js"></script>
 </body>
 </html>

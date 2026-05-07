@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ThreatPulse — Login</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080a0d;--bg2:#0c0f14;--bg3:#111620;--bg4:#161c28;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#c9d4e3;--muted:#4e5d72;
+  --teal:#00d4aa;--teal-d:rgba(0,212,170,0.08);--teal-m:rgba(0,212,170,0.15);
+  --red:#f0595a;--red-d:rgba(240,89,90,0.1);
+  --mono:'JetBrains Mono',monospace;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:12px}
+body{display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+body::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 30%,rgba(0,212,170,.04) 0%,transparent 60%);pointer-events:none}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px)}
+
+.card{width:360px;background:var(--bg2);border:1px solid var(--border2);padding:40px}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:32px}
+.brand-pulse{width:7px;height:7px;border-radius:50%;background:var(--teal);animation:pulse 2.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.2}}
+.brand-name{font-size:13px;font-weight:700;letter-spacing:4px;color:var(--teal)}
+.brand-sub{font-size:8px;letter-spacing:2px;color:var(--muted);margin-top:4px}
+
+.form-group{margin-bottom:16px}
+label{display:block;font-size:8px;letter-spacing:1.5px;color:var(--muted);margin-bottom:6px;text-transform:uppercase}
+input{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:11px;padding:9px 12px;outline:none;transition:border-color .15s}
+input::placeholder{color:var(--muted)}
+input:focus{border-color:var(--teal);background:var(--bg4)}
+
+.submit-btn{width:100%;margin-top:8px;padding:10px;background:var(--teal-d);border:1px solid var(--teal);color:var(--teal);font-family:var(--mono);font-size:10px;letter-spacing:2px;cursor:pointer;transition:all .15s;font-weight:600}
+.submit-btn:hover{background:var(--teal-m)}
+.submit-btn:active{opacity:.8}
+.submit-btn:disabled{opacity:.4;cursor:not-allowed}
+
+.error-msg{margin-top:14px;padding:8px 12px;background:var(--red-d);border:1px solid rgba(240,89,90,.3);color:var(--red);font-size:9px;letter-spacing:.5px;display:none}
+.error-msg.show{display:block}
+
+.version{position:fixed;bottom:16px;right:20px;font-size:8px;color:var(--muted);letter-spacing:1px}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="brand">
+    <div class="brand-pulse"></div>
+    <div>
+      <div class="brand-name">THREATPULSE</div>
+      <div class="brand-sub">INTELLIGENCE PLATFORM</div>
+    </div>
+  </div>
+
+  <form id="loginForm" onsubmit="doLogin(event)">
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="username" placeholder="Enter username" autocomplete="username" required autofocus>
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="password" placeholder="Enter password" autocomplete="current-password" required>
+    </div>
+    <button type="submit" class="submit-btn" id="submitBtn">AUTHENTICATE</button>
+    <div class="error-msg" id="errorMsg"></div>
+  </form>
+</div>
+
+<div class="version">v1.0 &nbsp;·&nbsp; FEDRAMP 20x READY</div>
+
+<script>
+async function doLogin(e) {
+  e.preventDefault();
+  const btn = document.getElementById('submitBtn');
+  const err = document.getElementById('errorMsg');
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+
+  btn.disabled = true;
+  btn.textContent = 'AUTHENTICATING...';
+  err.classList.remove('show');
+
+  try {
+    const res = await fetch('/auth/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username, password}),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.detail || 'Authentication failed');
+    }
+
+    localStorage.setItem('token', data.access_token);
+    localStorage.setItem('role', data.role || '');
+    localStorage.setItem('display_name', data.display_name || username);
+    localStorage.setItem('client_id', data.client_id || '');
+
+    location.href = '/index.html';
+  } catch (ex) {
+    err.textContent = ex.message || 'Login failed. Check credentials.';
+    err.classList.add('show');
+    btn.disabled = false;
+    btn.textContent = 'AUTHENTICATE';
+  }
+}
+
+// Redirect if already logged in
+if (localStorage.getItem('token')) {
+  location.href = '/index.html';
+}
+</script>
+</body>
+</html>

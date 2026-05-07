@@ -30,6 +30,7 @@ async def login(req: LoginRequest):
         "access_token": token,
         "token_type": "bearer",
         "role": user["role"],
+        "display_name": user["username"],
         "client_id": user.get("client_id"),
     }
 

@@ -122,19 +122,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .notif-time{font-size:9px;color:var(--muted);margin-top:2px}
 </style>
 </head>
-<body>
+<body data-page-title="CLIENT DASHBOARD" data-back-url="/index.html">
 <div class="topbar">
-  <a class="topbar-brand" href="/">PHANTOM<span style="color:#fff">FEED</span></a>
-  <span class="topbar-client" id="clientName">Loading...</span>
-  <div class="topbar-nav">
-    <a href="dashboard.html">Feed</a>
-    <a href="analytics.html">Analytics</a>
-    <a href="actors.html">Actors</a>
-    <a href="cmmc.html">CMMC</a>
-    <a href="supplychain.html">Supply Chain</a>
-    <a href="upload.html">Upload</a>
-    <a href="admin.html">Admin</a>
-  </div>
+  <span class="topbar-client" id="clientName" style="font-size:9px;color:var(--muted);margin-left:8px">Loading...</span>
   <div id="postureWidget" class="posture-badge" title="Security Posture Score" style="display:none">
     Posture: <span class="posture-score" id="postureTopbar">--</span>
   </div>
@@ -753,5 +743,6 @@ async function init() {
 
 init();
 </script>
+<script src="/nav-component.js"></script>
 </body>
 </html>

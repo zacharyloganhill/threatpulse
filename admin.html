@@ -81,23 +81,9 @@ input[type=file]{display:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
-<body>
+<body data-page-title="ADMIN" data-back-url="/index.html">
 <div class="shell">
-<div class="topbar">
-  <div class="logo-pulse"></div>
-  <div class="logo-text">PHANTOMFEED</div>
-  <div class="page-title">ADMIN</div>
-  <nav class="topnav">
-    <a class="tnav" href="dashboard.html">DASHBOARD</a>
-    <a class="tnav" href="analytics.html">ANALYTICS</a>
-    <a class="tnav" href="actors.html">ACTORS</a>
-    <a class="tnav" href="cmmc.html">CMMC</a>
-    <a class="tnav" href="supplychain.html">SUPPLY CHAIN</a>
-    <a class="tnav" href="fedramp.html">FEDRAMP 20x</a>
-    <a class="tnav" href="upload.html">UPLOAD</a>
-    <a class="tnav active" href="admin.html">ADMIN</a>
-  </nav>
-</div>
+<div class="topbar"></div>
 
 <div class="layout">
   <!-- Client sidebar -->
@@ -137,7 +123,7 @@ function toast(msg, type='info', dur=3000) {
   if (dur) setTimeout(()=>t.remove(), dur);
 }
 
-function getToken() { return localStorage.getItem('pf_token')||''; }
+function getToken() { return localStorage.getItem('token')||localStorage.getItem('pf_token')||''; }
 
 async function loadClients() {
   try {
@@ -768,5 +754,6 @@ async function loadAuditTab() {
 
 loadClients();
 </script>
+<script src="/nav-component.js"></script>
 </body>
 </html>

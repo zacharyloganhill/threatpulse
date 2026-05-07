@@ -47,6 +47,7 @@ from api.siem_routes import router as siem_router
 from api.oscal_routes import router as oscal_router
 from api.ksi_routes import router as ksi_router
 from api.audit_routes import router as audit_router
+from api.nav_routes import router as nav_router
 
 console = Console()
 
@@ -154,6 +155,7 @@ app.include_router(siem_router, tags=["FedRAMP SIEMs"])
 app.include_router(oscal_router, tags=["FedRAMP OSCAL"])
 app.include_router(ksi_router, tags=["FedRAMP KSI"])
 app.include_router(audit_router, tags=["FedRAMP Audit"])
+app.include_router(nav_router, tags=["Navigation"])
 
 
 @app.api_route("/api/ollama/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
@@ -176,14 +178,8 @@ async def ollama_proxy(path: str, request: Request):
 
 @app.get("/", include_in_schema=False)
 async def root():
-    stats = await db.get_stats()
-    return {
-        "service": "ThreatPulse Intelligence Feed",
-        "version": "1.0.0",
-        "status": "running",
-        "docs": f"http://{config.HOST}:{config.PORT}/docs",
-        "stats": stats,
-    }
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/index.html")
 
 
 app.mount("/", StaticFiles(directory=".", html=True), name="static")

@@ -23,7 +23,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:#1e2836;border-radius:2px}
 
-.shell{display:grid;grid-template-rows:44px 1fr 28px;grid-template-columns:200px 1fr 290px;height:100vh}
+.shell{display:grid;grid-template-rows:44px auto 1fr 28px;grid-template-columns:200px 1fr 290px;height:100vh}
+.chipbar{grid-column:1/-1;display:flex;align-items:center;gap:6px;padding:0 14px;background:var(--bg2);border-bottom:1px solid var(--border);height:36px;min-height:36px}
 
 /* Topbar */
 .topbar{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--bg2);border-bottom:1px solid var(--border)}
@@ -155,32 +156,19 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
 </style>
 </head>
-<body>
+<body data-page-title="INTELLIGENCE FEED" data-back-url="/index.html">
 <div class="shell">
 
-<!-- TOPBAR -->
-<header class="topbar">
-  <div style="display:flex;align-items:center;gap:8px">
-    <div class="logo-pulse"></div>
-    <span class="logo-text">THREATPULSE</span>
-    <span class="vsep"></span>
-    <span class="live-tag">LIVE</span>
-  </div>
+<header class="topbar"></header>
+
+<!-- CHIPBAR -->
+<div class="chipbar">
   <div class="stat-chips" id="chips"><span class="chip to">Connecting...</span></div>
-  <div class="tr">
-    <span class="lsync" id="lsync">—</span>
-    <a href="/analytics.html" class="bbtn" style="text-decoration:none">ANALYTICS</a>
-    <a href="/actors.html" class="bbtn" style="text-decoration:none">ACTORS</a>
-    <a href="/cmmc.html" class="bbtn" style="text-decoration:none">CMMC</a>
-    <a href="/supplychain.html" class="bbtn" style="text-decoration:none">SUPPLY CHAIN</a>
-    <a href="/fedramp.html" class="bbtn" style="text-decoration:none">FEDRAMP 20x</a>
-    <a href="/upload.html" class="bbtn" style="text-decoration:none">⬆ UPLOAD</a>
-    <a href="/admin.html" class="bbtn" style="text-decoration:none">ADMIN</a>
-    <button class="bbtn" onclick="exportCurrentCSV()">⬇ EXPORT</button>
-    <button class="bbtn" id="rfbtn" onclick="doRefresh()">↺ REFRESH</button>
-    <button class="bbtn on" id="autobtn" onclick="toggleAuto()">AUTO ON</button>
-  </div>
-</header>
+  <span class="lsync" id="lsync">—</span>
+  <button class="bbtn" onclick="exportCurrentCSV()">&#8595; EXPORT</button>
+  <button class="bbtn" id="rfbtn" onclick="doRefresh()">&#8635; REFRESH</button>
+  <button class="bbtn on" id="autobtn" onclick="toggleAuto()">AUTO ON</button>
+</div>
 
 <!-- SIDEBAR -->
 <nav class="sidebar">
@@ -636,5 +624,6 @@ function copyMarkdown(title, severity, cves, url) {
 
 (async()=>{showSkel();await Promise.all([loadStats(),load(),loadOllamaStatus()]);sched();})();
 </script>
+<script src="/nav-component.js"></script>
 </body>
 </html>
