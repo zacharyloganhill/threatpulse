@@ -113,6 +113,17 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
     <div id="top-risks" style="overflow-y:auto;max-height:220px"></div>
   </div>
 
+  <!-- Client benchmark leaderboard -->
+  <div class="chart-card wide" id="benchmark-card">
+    <div class="chtitle" style="display:flex;align-items:center;justify-content:space-between">
+      <span>Client Posture Benchmarks</span>
+      <span style="font-size:8px;color:var(--muted);font-weight:400;letter-spacing:0">All clients ranked by security posture score</span>
+    </div>
+    <div id="benchmark-table" style="overflow-x:auto">
+      <div style="color:var(--muted);font-size:9px;padding:20px 0;text-align:center">Loading benchmarks...</div>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -353,11 +364,60 @@ function destroyChart(id) {
 function riskColor(r){if(!r)return'var(--muted)';if(r>=8)return'var(--red)';if(r>=6)return'var(--amber)';if(r>=3)return'var(--blue)';return'var(--muted)';}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
+async function loadBenchmarks() {
+  const el = document.getElementById('benchmark-table');
+  try {
+    const d = await apiFetch('/benchmarks');
+    if (!d || !d.length) {
+      el.innerHTML = '<div style="color:var(--muted);font-size:9px;padding:16px 0;text-align:center">No clients to benchmark yet</div>';
+      return;
+    }
+    const gradeColor = g => ({'A':'var(--green)','B':'var(--teal)','C':'var(--amber)','D':'var(--red)','F':'var(--red)'}[g] || 'var(--muted)');
+    const barW = score => Math.round((score / 100) * 180);
+    el.innerHTML = `
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border)">
+            <th style="text-align:left;font-size:8px;color:var(--muted);letter-spacing:1px;padding:6px 8px;font-weight:400">RANK</th>
+            <th style="text-align:left;font-size:8px;color:var(--muted);letter-spacing:1px;padding:6px 8px;font-weight:400">CLIENT</th>
+            <th style="text-align:left;font-size:8px;color:var(--muted);letter-spacing:1px;padding:6px 8px;font-weight:400">INDUSTRY</th>
+            <th style="text-align:left;font-size:8px;color:var(--muted);letter-spacing:1px;padding:6px 8px;font-weight:400">SCORE</th>
+            <th style="text-align:left;font-size:8px;color:var(--muted);letter-spacing:1px;padding:6px 8px;font-weight:400;min-width:200px">POSTURE BAR</th>
+            <th style="text-align:left;font-size:8px;color:var(--muted);letter-spacing:1px;padding:6px 8px;font-weight:400">GRADE</th>
+            <th style="text-align:left;font-size:8px;color:var(--muted);letter-spacing:1px;padding:6px 8px;font-weight:400">PERCENTILE</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${d.map(c => `
+            <tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:8px;font-size:10px;color:var(--muted)">#${c.rank}</td>
+              <td style="padding:8px;font-size:10px;font-weight:600">${esc(c.client_name)}</td>
+              <td style="padding:8px;font-size:9px;color:var(--muted)">${esc(c.industry || '—')}</td>
+              <td style="padding:8px;font-size:12px;font-weight:700;color:${gradeColor(c.grade)}">${c.score != null ? c.score.toFixed(1) : '—'}</td>
+              <td style="padding:8px">
+                <div style="width:180px;height:5px;background:rgba(255,255,255,.06);border-radius:2px">
+                  <div style="width:${barW(c.score || 0)}px;height:5px;background:${gradeColor(c.grade)};border-radius:2px"></div>
+                </div>
+              </td>
+              <td style="padding:8px">
+                <span style="font-size:12px;font-weight:700;color:${gradeColor(c.grade)}">${c.grade || '—'}</span>
+              </td>
+              <td style="padding:8px;font-size:9px;color:var(--muted)">${c.percentile != null ? c.percentile + 'th' : '—'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`;
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:9px;padding:16px 0;text-align:center">Failed to load benchmarks</div>';
+  }
+}
+
 async function loadAll() {
   document.getElementById('last-updated').textContent = 'Loading...';
   await Promise.all([
     loadSummary(), loadTrend(), loadSevDoughnut(),
-    loadCategoryChart(), loadVendorChart(), loadMTTRChart(), loadTopRisks()
+    loadCategoryChart(), loadVendorChart(), loadMTTRChart(), loadTopRisks(),
+    loadBenchmarks()
   ]);
   document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
 }

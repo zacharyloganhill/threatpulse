@@ -167,6 +167,20 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
     <div id="oar-preview" style="font-size:10px;line-height:1.7"></div>
   </div>
 
+  <!-- TAXII Feed Status -->
+  <div class="section" id="taxii-section">
+    <div class="section-header" style="display:flex;align-items:center;justify-content:space-between">
+      <span>TAXII 2.1 Feed Status</span>
+      <button class="btn sm" onclick="loadTAXII()">REFRESH</button>
+    </div>
+    <table>
+      <thead><tr><th>Feed</th><th>URL</th><th>Status</th><th>Notes</th></tr></thead>
+      <tbody id="taxii-tbody">
+        <tr><td colspan="4" style="color:var(--muted);font-size:9px;padding:8px 0">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
   <!-- MISP Integration -->
   <div class="section" id="misp-section">
     <div class="section-header" style="display:flex;align-items:center;justify-content:space-between">
@@ -440,6 +454,35 @@ function downloadExecutiveReport() {
   window.open(`${API}/clients/${clientId}/report/pdf?token=${getToken()}`, '_blank');
 }
 
+// ── TAXII Feed Status ────────────────────────────────────────────────────────────
+async function loadTAXII() {
+  const tbody = document.getElementById('taxii-tbody');
+  try {
+    const r = await fetch(`${API}/taxii/sources`, {headers:{Authorization:'Bearer '+getToken()}});
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    const sources = d.sources || [];
+    if (!sources.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);font-size:9px;padding:8px 0">No TAXII feeds configured</td></tr>';
+      return;
+    }
+    const stColors = {ok:'var(--green)', error:'var(--red)', skipped_no_cert:'var(--amber)', unknown:'var(--muted)'};
+    tbody.innerHTML = sources.map(s => {
+      const st = s.status || 'unknown';
+      const stColor = stColors[st] || 'var(--muted)';
+      const stLabel = st === 'skipped_no_cert' ? 'CERT REQUIRED' : st.toUpperCase();
+      return `<tr>
+        <td style="font-size:9px;font-weight:600">${esc(s.label)}</td>
+        <td style="font-size:9px;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(s.url)}">${esc(s.url)}</td>
+        <td><span style="font-size:8px;color:${stColor};font-weight:600">${stLabel}</span></td>
+        <td style="font-size:9px;color:var(--muted)">${esc(s.notes || s.error || '—')}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);font-size:9px">Failed to load TAXII status</td></tr>';
+  }
+}
+
 // ── MISP Integration ────────────────────────────────────────────────────────────
 async function loadMISP() {
   try {
@@ -507,6 +550,7 @@ async function syncMISP() {
 }
 
 loadClients();
+loadTAXII();
 loadMISP();
 setInterval(() => {
   const clientId = document.getElementById('client-sel').value;

@@ -102,6 +102,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </label>
     </div>
     <div class="actor-list" id="actorList"></div>
+
+    <!-- Client targeting analysis -->
+    <div style="border-top:1px solid var(--border);padding:12px 14px;background:var(--bg2)">
+      <div style="font-size:8px;letter-spacing:1.5px;color:var(--muted);margin-bottom:8px;text-transform:uppercase">Client Targeting</div>
+      <select id="actor-client-sel" onchange="loadActorAlerts()" style="font-family:var(--mono);font-size:9px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px 6px;width:100%;outline:none;margin-bottom:8px">
+        <option value="">— Select client —</option>
+      </select>
+      <div id="actor-alerts-panel" style="font-size:9px;color:var(--muted)">Select a client to see which threat actors target their industry</div>
+    </div>
   </div>
 
   <div class="main">
@@ -296,7 +305,64 @@ function renderDossier(actor, items) {
   `;
 }
 
+// ── Client Targeting Analysis ─────────────────────────────────────────────────
+let actorClients = [];
+let selectedActorClient = '';
+
+async function loadActorClients() {
+  try {
+    const r = await fetch(`${API}/admin/clients`, {headers: hdr()});
+    if (!r.ok) return;
+    const data = await r.json();
+    actorClients = Array.isArray(data) ? data : (data.clients || []);
+    const sel = document.getElementById('actor-client-sel');
+    if (!sel) return;
+    actorClients.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.id; o.textContent = c.name;
+      sel.appendChild(o);
+    });
+  } catch(e) {}
+}
+
+async function loadActorAlerts() {
+  const clientId = document.getElementById('actor-client-sel')?.value;
+  if (!clientId) return;
+  selectedActorClient = clientId;
+  const el = document.getElementById('actor-alerts-panel');
+  el.innerHTML = '<div style="color:var(--muted);font-size:9px;padding:16px">Loading...</div>';
+  try {
+    const r = await fetch(`${API}/clients/${clientId}/actor-alerts`, {headers: hdr()});
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    const actors = d.actors_targeting || [];
+    const industry = d.client_industry || '—';
+
+    if (!actors.length) {
+      el.innerHTML = `<div style="color:var(--muted);font-size:9px;padding:12px 0">No tracked threat actors currently target this client's industry (${esc(industry)})</div>`;
+      return;
+    }
+
+    el.innerHTML = `
+      <div style="font-size:8px;color:var(--muted);margin-bottom:10px">${actors.length} actor(s) targeting <strong style="color:var(--text)">${esc(industry)}</strong> industry</div>
+      ${actors.map(a => `
+        <div style="padding:10px;border:1px solid var(--border);border-left:3px solid var(--red);margin-bottom:8px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <span style="font-size:10px;font-weight:600;color:var(--text)">${esc(a.name)}</span>
+            ${a.origin ? `<span style="font-size:8px;color:var(--muted)">${esc(a.origin)}</span>` : ''}
+            ${a.is_active ? '<span style="font-size:7px;padding:1px 5px;border:1px solid rgba(240,89,90,.4);color:var(--red)">ACTIVE</span>' : ''}
+          </div>
+          ${a.motivation ? `<div style="font-size:8px;color:var(--muted)">Motivation: ${esc(a.motivation)}</div>` : ''}
+          ${(a.target_industries||[]).length ? `<div style="font-size:8px;color:var(--muted);margin-top:3px">Targets: ${a.target_industries.join(', ')}</div>` : ''}
+        </div>
+      `).join('')}`;
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:9px;padding:12px 0">Failed to load actor alerts</div>';
+  }
+}
+
 loadActors();
+loadActorClients();
 </script>
 <script src="/nav-component.js"></script>
 </body>
