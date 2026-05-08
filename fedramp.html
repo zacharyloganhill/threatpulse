@@ -167,6 +167,39 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
     <div id="oar-preview" style="font-size:10px;line-height:1.7"></div>
   </div>
 
+  <!-- MISP Integration -->
+  <div class="section" id="misp-section">
+    <div class="section-header" style="display:flex;align-items:center;justify-content:space-between">
+      <span>MISP Threat Intelligence Sharing</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span id="misp-status-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted)"></span>
+        <span id="misp-status-label" style="font-size:8px;color:var(--muted)">CHECKING...</span>
+        <button class="btn sm" onclick="syncMISP()">SYNC NOW</button>
+      </div>
+    </div>
+    <div id="misp-summary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">
+      <div style="background:var(--bg3);border:1px solid var(--border);padding:10px">
+        <div style="font-size:7px;letter-spacing:1.5px;color:var(--muted);margin-bottom:4px">CONNECTION</div>
+        <div id="misp-conn" style="font-size:11px;font-weight:600;color:var(--muted)">—</div>
+      </div>
+      <div style="background:var(--bg3);border:1px solid var(--border);padding:10px">
+        <div style="font-size:7px;letter-spacing:1.5px;color:var(--muted);margin-bottom:4px">EVENTS PULLED</div>
+        <div id="misp-count" style="font-size:11px;font-weight:600;color:var(--text)">—</div>
+      </div>
+      <div style="background:var(--bg3);border:1px solid var(--border);padding:10px">
+        <div style="font-size:7px;letter-spacing:1.5px;color:var(--muted);margin-bottom:4px">LAST SYNC</div>
+        <div id="misp-last" style="font-size:11px;font-weight:600;color:var(--text)">—</div>
+      </div>
+    </div>
+    <div style="font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:8px">RECENT MISP EVENTS</div>
+    <table>
+      <thead><tr><th>Title</th><th>Severity</th><th>Category</th><th>Date</th></tr></thead>
+      <tbody id="misp-tbody">
+        <tr><td colspan="4" style="color:var(--muted);font-size:9px;padding:10px 0">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
 </div>
 
 <script>
@@ -407,7 +440,74 @@ function downloadExecutiveReport() {
   window.open(`${API}/clients/${clientId}/report/pdf?token=${getToken()}`, '_blank');
 }
 
+// ── MISP Integration ────────────────────────────────────────────────────────────
+async function loadMISP() {
+  try {
+    const r = await fetch(`${API}/misp/status`, {headers:{Authorization:'Bearer '+getToken()}});
+    if (!r.ok) throw new Error('Not configured');
+    const d = await r.json();
+
+    const connected = d.configured && d.connected;
+    const dot   = document.getElementById('misp-status-dot');
+    const label = document.getElementById('misp-status-label');
+    dot.style.background = connected ? 'var(--green)' : (!d.configured ? 'var(--muted)' : 'var(--red)');
+    label.style.color    = connected ? 'var(--green)' : 'var(--muted)';
+    label.textContent    = connected ? 'CONNECTED' : (!d.configured ? 'NOT CONFIGURED' : 'UNREACHABLE');
+
+    document.getElementById('misp-conn').textContent  = d.url || 'Not set — configure MISP_URL + MISP_KEY';
+    document.getElementById('misp-conn').style.color  = connected ? 'var(--green)' : 'var(--muted)';
+    document.getElementById('misp-count').textContent = d.event_count != null ? d.event_count : '—';
+    document.getElementById('misp-last').textContent  = d.last_pull ? d.last_pull.substring(0,10) : 'Never';
+  } catch(e) {
+    document.getElementById('misp-status-dot').style.background = 'var(--muted)';
+    document.getElementById('misp-status-label').textContent    = 'NOT CONFIGURED';
+    document.getElementById('misp-conn').textContent            = 'Set MISP_URL + MISP_KEY in environment';
+  }
+
+  // Load recent MISP events
+  try {
+    const r2 = await fetch(`${API}/misp/events?limit=10`, {headers:{Authorization:'Bearer '+getToken()}});
+    const data = r2.ok ? await r2.json() : {events:[]};
+    const events = data.events || [];
+    const tbody = document.getElementById('misp-tbody');
+    if (!events.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);font-size:9px;padding:8px 0">No MISP events pulled yet</td></tr>';
+      return;
+    }
+    tbody.innerHTML = events.map(ev => `
+      <tr>
+        <td style="font-size:9px">${esc((ev.title||'').substring(0,80))}</td>
+        <td><span style="font-size:8px;color:${ev.severity==='CRITICAL'?'var(--red)':ev.severity==='HIGH'?'var(--amber)':'var(--blue)'}">${esc(ev.severity||'—')}</span></td>
+        <td style="font-size:9px;color:var(--muted)">${esc(ev.category||'—')}</td>
+        <td style="font-size:9px;color:var(--muted)">${(ev.published_at||'').substring(0,10)}</td>
+      </tr>
+    `).join('');
+  } catch(e) {
+    document.getElementById('misp-tbody').innerHTML =
+      '<tr><td colspan="4" style="color:var(--muted);font-size:9px">Failed to load events</td></tr>';
+  }
+}
+
+async function syncMISP() {
+  const btn = document.querySelector('#misp-section .btn.sm');
+  btn.disabled = true; btn.textContent = 'SYNCING...';
+  try {
+    const r = await fetch(`${API}/misp/sync`, {
+      method: 'POST', headers:{Authorization:'Bearer '+getToken()}
+    });
+    const d = r.ok ? await r.json() : {};
+    btn.textContent = 'SYNC NOW';
+    btn.disabled = false;
+    alert(d.message || 'Sync triggered — check back in a moment');
+    setTimeout(loadMISP, 5000);
+  } catch(e) {
+    btn.textContent = 'SYNC NOW'; btn.disabled = false;
+    alert('Sync failed: ' + e.message);
+  }
+}
+
 loadClients();
+loadMISP();
 setInterval(() => {
   const clientId = document.getElementById('client-sel').value;
   if (clientId) loadDashboard();
