@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from auth.auth import get_current_user, require_client_access
 from db import database as db
 
@@ -13,12 +13,23 @@ def _cutoff(days: int) -> str:
     return (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)).strftime("%Y-%m-%d")
 
 
+def _scope_client_id(user: dict, client_id: Optional[str]) -> Optional[str]:
+    """Non-admins may only request analytics for their own client_id."""
+    if user.get("role") == "admin":
+        return client_id
+    own = user.get("client_id")
+    if client_id and client_id != own:
+        raise HTTPException(403, "Access denied")
+    return client_id
+
+
 @router.get("/analytics/trend", summary="Daily item counts by severity for trend chart")
 async def trend(
     client_id: Optional[str] = Query(None),
     days: int = Query(90, ge=7, le=365),
-    _: dict = Depends(get_current_user),
+    user: dict = Depends(get_current_user),
 ):
+    client_id = _scope_client_id(user, client_id)
     database = db.get_db()
     cut = _cutoff(days)
     async with database.execute(
@@ -51,8 +62,9 @@ async def trend(
 async def by_vendor(
     client_id: Optional[str] = Query(None),
     days: int = Query(30, ge=7, le=365),
-    _: dict = Depends(get_current_user),
+    user: dict = Depends(get_current_user),
 ):
+    client_id = _scope_client_id(user, client_id)
     database = db.get_db()
     cut = _cutoff(days)
     async with database.execute(
@@ -81,8 +93,9 @@ async def by_vendor(
 async def by_category(
     client_id: Optional[str] = Query(None),
     days: int = Query(30, ge=7, le=365),
-    _: dict = Depends(get_current_user),
+    user: dict = Depends(get_current_user),
 ):
+    client_id = _scope_client_id(user, client_id)
     database = db.get_db()
     cut = _cutoff(days)
     async with database.execute(
@@ -100,8 +113,9 @@ async def by_category(
 async def heatmap(
     client_id: Optional[str] = Query(None),
     days: int = Query(30, ge=7, le=365),
-    _: dict = Depends(get_current_user),
+    user: dict = Depends(get_current_user),
 ):
+    client_id = _scope_client_id(user, client_id)
     database = db.get_db()
     cut = _cutoff(days)
     async with database.execute(
@@ -133,8 +147,9 @@ async def heatmap(
 async def remediation_trend(
     client_id: Optional[str] = Query(None),
     days: int = Query(90, ge=30, le=365),
-    _: dict = Depends(get_current_user),
+    user: dict = Depends(get_current_user),
 ):
+    client_id = _scope_client_id(user, client_id)
     if not client_id:
         return {"days": days, "data": []}
     database = db.get_db()
@@ -156,8 +171,9 @@ async def remediation_trend(
 async def top_risks(
     client_id: Optional[str] = Query(None),
     limit: int = Query(10, ge=1, le=50),
-    _: dict = Depends(get_current_user),
+    user: dict = Depends(get_current_user),
 ):
+    client_id = _scope_client_id(user, client_id)
     items = await db.get_items(limit=limit, sort="risk")
     if client_id:
         exposed = await db.get_exposed_item_ids(client_id)
@@ -169,8 +185,9 @@ async def top_risks(
 async def summary(
     client_id: Optional[str] = Query(None),
     days: int = Query(30, ge=7, le=365),
-    _: dict = Depends(get_current_user),
+    user: dict = Depends(get_current_user),
 ):
+    client_id = _scope_client_id(user, client_id)
     database = db.get_db()
     cut = _cutoff(days)
     cut_prev = _cutoff(days * 2)
@@ -234,10 +251,17 @@ async def industry_benchmark(industry: str, _: dict = Depends(get_current_user))
 
 
 @router.get("/benchmarks", summary="All clients ranked by posture score")
-async def all_clients_ranking(_: dict = Depends(get_current_user)):
+async def all_clients_ranking(user: dict = Depends(get_current_user)):
     from analytics.benchmarking import BenchmarkingEngine
     engine = BenchmarkingEngine()
-    return await engine.get_all_clients_ranking()
+    ranking = await engine.get_all_clients_ranking()
+    # Non-admins only see their own client in the ranking
+    if user.get("role") != "admin":
+        own = user.get("client_id")
+        ranking = [r for r in (ranking if isinstance(ranking, list) else ranking.get("ranking", []))
+                   if r.get("client_id") == own]
+        return {"ranking": ranking}
+    return ranking
 
 
 # ── Breach Cost & ROI ──────────────────────────────────────────────────────
