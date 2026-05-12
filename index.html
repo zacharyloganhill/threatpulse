@@ -248,6 +248,8 @@ async function loadScanners() {
     const active = items.filter(s => s.is_active).length;
     badge.textContent = `${active} ACTIVE`;
     badge.className = 'status-card-badge ' + (active > 0 ? 'ok' : 'muted');
+    const intBadge = document.getElementById('integrationsBadge');
+    if (intBadge && items.length > 0) { intBadge.style.display = ''; intBadge.textContent = items.length + ' CONFIGURED'; }
     if (!items.length) { el.innerHTML = '<div class="status-empty">No scanners configured</div>'; return; }
     el.innerHTML = items.map(s => {
       const ok = s.last_status && s.last_status.startsWith('ok');
@@ -398,7 +400,7 @@ async function loadClientView() {
 
   // Load dark web alerts count for this client
   try {
-    const dwr = await fetch(`/api/v1/darkweb/alerts?client_id=${CLIENT_ID}&unacknowledged_only=true&limit=1`, {headers: authHdr()});
+    const dwr = await fetch(`/api/v1/clients/${CLIENT_ID}/darkweb-alerts?unacknowledged_only=true&limit=1`, {headers: authHdr()});
     if (dwr.ok) {
       const dwd = await dwr.json();
       const chips = document.querySelectorAll('.stat-chip');
@@ -418,12 +420,15 @@ async function loadClientView() {
 
 if (IS_CLIENT) {
   loadClientView();
+  setInterval(loadClientView, 30000);
 } else {
   loadStats();
   loadScanners();
   loadSiems();
   loadKSI();
   loadNotifications();
+  setInterval(() => { loadStats(); loadNotifications(); }, 30000);
+  setInterval(() => { loadScanners(); loadSiems(); loadKSI(); }, 120000);
 }
 </script>
 

@@ -189,6 +189,13 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
 /* Skeleton */
 .skel{background:var(--bg3);animation:shim 1.4s ease-in-out infinite;border-radius:2px;display:inline-block}
 @keyframes shim{0%,100%{opacity:.3}50%{opacity:.8}}
+.toast-container{position:fixed;bottom:16px;right:16px;display:flex;flex-direction:column;gap:6px;z-index:10000}
+.toast{padding:8px 14px;background:var(--bg2);border:1px solid var(--border);font-size:9px;letter-spacing:.5px;color:var(--text);display:flex;align-items:center;gap:9px;min-width:220px;animation:slideIn .2s ease;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+@keyframes slideIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:translateX(0)}}
+.toast.success{border-color:rgba(61,214,140,.4);background:rgba(61,214,140,.05)}
+.toast.error{border-color:rgba(240,89,90,.4);background:rgba(240,89,90,.05)}
+.toast.info{border-color:rgba(77,157,224,.4);background:rgba(77,157,224,.05)}
+.toast-close{margin-left:auto;cursor:pointer;opacity:.5}.toast-close:hover{opacity:1}
 </style>
 </head>
 <body data-page-title="CLIENT PORTAL" data-back-url="/index.html">
@@ -250,6 +257,7 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
         <button class="tab-btn"    id="tabRem"  onclick="switchTab('rem')">REMEDIATION</button>
         <button class="tab-btn"    id="tabTT"   onclick="switchTab('tt')">TABLETOP</button>
         <button class="tab-btn"    id="tabRisk" onclick="switchTab('risk')">RISK</button>
+        <button class="tab-btn"    id="tabIOC"  onclick="switchTab('ioc')">IOC LOOKUP</button>
       </div>
       <div class="tab-content">
 
@@ -280,6 +288,24 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
           <div class="panel-hdr">
             <span>OPEN REMEDIATIONS</span>
             <span id="remCount" class="panel-badge" style="display:none"></span>
+          </div>
+          <div id="remMetrics" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:10px 14px;border-bottom:1px solid var(--border)">
+            <div style="background:var(--bg3);border:1px solid var(--border);padding:8px;text-align:center">
+              <div id="mOpen" style="font-size:18px;font-weight:700;color:var(--amber)">—</div>
+              <div style="font-size:7px;letter-spacing:1.2px;color:var(--muted);margin-top:2px">OPEN</div>
+            </div>
+            <div style="background:var(--bg3);border:1px solid var(--border);padding:8px;text-align:center">
+              <div id="mOverdue" style="font-size:18px;font-weight:700;color:var(--red)">—</div>
+              <div style="font-size:7px;letter-spacing:1.2px;color:var(--muted);margin-top:2px">OVERDUE</div>
+            </div>
+            <div style="background:var(--bg3);border:1px solid var(--border);padding:8px;text-align:center">
+              <div id="mMTTR" style="font-size:18px;font-weight:700;color:var(--blue)">—</div>
+              <div style="font-size:7px;letter-spacing:1.2px;color:var(--muted);margin-top:2px">AVG MTTR (d)</div>
+            </div>
+            <div style="background:var(--bg3);border:1px solid var(--border);padding:8px;text-align:center">
+              <div id="mSLA" style="font-size:18px;font-weight:700;color:var(--green)">—</div>
+              <div style="font-size:7px;letter-spacing:1.2px;color:var(--muted);margin-top:2px">SLA COMPLIANCE</div>
+            </div>
           </div>
           <div id="remList">
             <div class="empty-feed"><div class="empty-ico">&#9650;</div><div>Loading remediations...</div></div>
@@ -328,6 +354,21 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
           </div>
         </div>
 
+        <!-- IOC Lookup panel -->
+        <div id="panelIOC" style="display:none;padding:14px">
+          <div style="font-size:8px;letter-spacing:1.5px;color:var(--teal);margin-bottom:12px;text-transform:uppercase">IOC INTELLIGENCE LOOKUP</div>
+          <div style="font-size:9px;color:var(--muted);margin-bottom:12px;line-height:1.6">Enrich any IP address, domain, URL, or file hash against AbuseIPDB, VirusTotal, and GreyNoise.</div>
+          <div style="display:flex;gap:6px;margin-bottom:10px">
+            <input id="portal-ioc-input" type="text" placeholder="8.8.8.8 / evil.com / sha256hash / https://..." style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:9px;padding:7px 10px;outline:none" onkeydown="if(event.key==='Enter')portalLookupIOC()">
+            <button onclick="portalLookupIOC()" style="font-family:var(--mono);font-size:8px;letter-spacing:1px;padding:7px 14px;background:transparent;border:1px solid var(--teal);color:var(--teal);cursor:pointer;white-space:nowrap">LOOKUP</button>
+          </div>
+          <div id="portal-ioc-result" style="font-size:9px;line-height:1.8"></div>
+          <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+            <div style="font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:8px">RECENT LOOKUPS</div>
+            <div id="portal-ioc-history" style="font-size:9px;color:var(--muted)">No lookups yet this session</div>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -343,6 +384,16 @@ if (!TOKEN || !CLIENT_ID) location.href = '/login.html';
 
 function authHdr() { return {Authorization: 'Bearer ' + TOKEN}; }
 function esc(s) { const d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
+
+function toast(msg, type='info', dur=3500) {
+  const icons = {success:'✓', error:'✕', info:'ℹ'};
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.innerHTML = `<span style="font-size:11px">${icons[type]||'ℹ'}</span><span>${msg}</span><span class="toast-close" onclick="this.parentElement.remove()">✕</span>`;
+  const container = document.getElementById('portal-toast-container');
+  if (container) container.appendChild(t);
+  if (dur) setTimeout(() => t.remove(), dur);
+}
 
 // ── Feed ─────────────────────────────────────────
 let feedOffset   = 0;
@@ -454,6 +505,7 @@ function buildExpand(item) {
 // ── Tabs ─────────────────────────────────────────
 let ttLoaded   = false;
 let riskLoaded = false;
+let iocHistory = [];
 function switchTab(tab) {
   const map = {
     ksi:  ['panelKSI',   'tabKSI'],
@@ -461,13 +513,61 @@ function switchTab(tab) {
     rem:  ['panelRem',   'tabRem'],
     tt:   ['panelTT',    'tabTT'],
     risk: ['panelRisk',  'tabRisk'],
+    ioc:  ['panelIOC',   'tabIOC'],
   };
   Object.entries(map).forEach(([k, [panelId, btnId]]) => {
-    document.getElementById(panelId).style.display = k === tab ? '' : 'none';
-    document.getElementById(btnId).classList.toggle('on', k === tab);
+    const p = document.getElementById(panelId);
+    const b = document.getElementById(btnId);
+    if (p) p.style.display = k === tab ? '' : 'none';
+    if (b) b.classList.toggle('on', k === tab);
   });
   if (tab === 'tt'   && !ttLoaded)   { ttLoaded   = true; loadTabletops(); }
   if (tab === 'risk' && !riskLoaded) { riskLoaded  = true; loadRiskPortfolio(); }
+}
+
+async function portalLookupIOC() {
+  const inp = document.getElementById('portal-ioc-input');
+  const resultEl = document.getElementById('portal-ioc-result');
+  const val = (inp?.value || '').trim();
+  if (!val || !resultEl) return;
+  resultEl.innerHTML = '<span style="color:var(--muted)">Enriching — querying threat intelligence...</span>';
+  try {
+    const r = await fetch(`${API}/ioc/lookup?value=${encodeURIComponent(val)}`, {headers: authHdr()});
+    if (!r.ok) { resultEl.innerHTML = '<span style="color:var(--red)">Lookup failed — check IOC format</span>'; return; }
+    const d = await r.json();
+    const isMal = (d.abuseipdb_score || 0) > 50 || (d.vt_malicious || 0) > 0 || d.greynoise_classification === 'malicious';
+    const verdict = isMal ? 'MALICIOUS' : d.greynoise_classification === 'benign' ? 'BENIGN' : 'UNKNOWN';
+    const vColor = verdict === 'MALICIOUS' ? 'var(--red)' : verdict === 'BENIGN' ? 'var(--green)' : 'var(--amber)';
+    const rows = [];
+    if (d.ioc_type) rows.push(`<div style="display:flex;gap:10px"><span style="color:var(--muted);width:110px">Type</span><span>${esc(d.ioc_type)}</span></div>`);
+    if (d.abuseipdb_score != null) rows.push(`<div style="display:flex;gap:10px"><span style="color:var(--muted);width:110px">AbuseIPDB</span><span style="color:${d.abuseipdb_score>50?'var(--red)':'var(--green)'}">${d.abuseipdb_score}%</span></div>`);
+    if (d.abuseipdb_country) rows.push(`<div style="display:flex;gap:10px"><span style="color:var(--muted);width:110px">Country</span><span>${esc(d.abuseipdb_country)}</span></div>`);
+    if (d.vt_malicious != null) rows.push(`<div style="display:flex;gap:10px"><span style="color:var(--muted);width:110px">VirusTotal</span><span style="color:${d.vt_malicious>0?'var(--red)':'var(--green)'}">${d.vt_malicious}/${d.vt_total||'?'} engines</span></div>`);
+    if (d.vt_name) rows.push(`<div style="display:flex;gap:10px"><span style="color:var(--muted);width:110px">Malware Name</span><span style="color:var(--red)">${esc(d.vt_name)}</span></div>`);
+    if (d.greynoise_classification) rows.push(`<div style="display:flex;gap:10px"><span style="color:var(--muted);width:110px">GreyNoise</span><span>${esc(d.greynoise_classification)}</span></div>`);
+    if (d.greynoise_name) rows.push(`<div style="display:flex;gap:10px"><span style="color:var(--muted);width:110px">GN Actor</span><span>${esc(d.greynoise_name)}</span></div>`);
+    resultEl.innerHTML = `
+      <div style="padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-left:3px solid ${vColor};margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span style="font-weight:600;font-size:10px">${esc(val)}</span>
+          <span style="font-size:8px;letter-spacing:1px;padding:2px 7px;border:1px solid ${vColor};color:${vColor}">${verdict}</span>
+        </div>
+        <div style="line-height:2">${rows.join('')}</div>
+      </div>`;
+    toast(`${val} → ${verdict}`, verdict === 'MALICIOUS' ? 'error' : verdict === 'BENIGN' ? 'success' : 'info', 3000);
+    iocHistory.unshift({val, verdict, vColor, ts: new Date().toLocaleTimeString()});
+    if (iocHistory.length > 10) iocHistory.pop();
+    document.getElementById('portal-ioc-history').innerHTML = iocHistory.map(h =>
+      `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="document.getElementById('portal-ioc-input').value='${h.val}';portalLookupIOC()">
+        <span style="flex:1;font-size:9px">${esc(h.val)}</span>
+        <span style="font-size:7px;letter-spacing:1px;color:${h.vColor}">${h.verdict}</span>
+        <span style="font-size:8px;color:var(--muted)">${h.ts}</span>
+      </div>`
+    ).join('');
+  } catch(e) {
+    resultEl.innerHTML = '<span style="color:var(--red)">Lookup failed — check IOC format or connectivity</span>';
+    toast('IOC lookup failed', 'error');
+  }
 }
 
 // ── Summary (stat chips + client name) ────────────
@@ -605,7 +705,23 @@ async function ackAlert(alertId, btn) {
 }
 
 // ── Remediation ───────────────────────────────────
+async function loadRemMetrics() {
+  try {
+    const r = await fetch(`${API}/clients/${CLIENT_ID}/metrics?days=90`, {headers: authHdr()});
+    if (!r.ok) return;
+    const d = await r.json();
+    const set = (id, val, suffix) => { const el = document.getElementById(id); if(el) el.textContent = val != null ? val + (suffix||'') : '—'; };
+    set('mOpen',    d.open_count,                     '');
+    set('mOverdue', d.overdue_count,                  '');
+    set('mMTTR',    d.mttr_days != null ? Math.round(d.mttr_days) : null, 'd');
+    set('mSLA',     d.sla_compliance_rate != null ? Math.round(d.sla_compliance_rate * 100) : null, '%');
+    const overEl = document.getElementById('mOverdue');
+    if(overEl && d.overdue_count > 0) overEl.style.color = 'var(--red)';
+  } catch{}
+}
+
 async function loadRemediation() {
+  loadRemMetrics();
   try {
     const res = await fetch(`${API}/clients/${CLIENT_ID}/remediation`, {headers: authHdr()});
     if (!res.ok) throw new Error();
@@ -710,10 +826,18 @@ const SCENARIO_TYPES = {
 };
 let selectedScenario = 'ransomware';
 
-function initTTTypeGrid() {
+async function initTTTypeGrid() {
   const grid = document.getElementById('ttTypeGrid');
-  grid.innerHTML = Object.entries(SCENARIO_TYPES).map(([k, label]) =>
-    `<button class="tt-type-btn${k === selectedScenario ? ' sel' : ''}" onclick="selectScenario('${k}',this)">${label}</button>`
+  let types = null;
+  try {
+    const r = await fetch(`${API}/tabletop/scenario-types`, {headers: authHdr()});
+    if (r.ok) types = await r.json();
+  } catch(e) {}
+  const entries = types
+    ? Object.entries(types).map(([k, v]) => [k, (v.title || k).toUpperCase()])
+    : Object.entries(SCENARIO_TYPES);
+  grid.innerHTML = entries.map(([k, label]) =>
+    `<button class="tt-type-btn${k === selectedScenario ? ' sel' : ''}" onclick="selectScenario('${k}',this)">${esc(label)}</button>`
   ).join('');
 }
 
@@ -777,11 +901,13 @@ async function generateTabletop() {
     if (!res.ok) throw new Error(await res.text());
     status.textContent = 'Scenario generated!';
     status.style.color = 'var(--green)';
+    toast('Tabletop scenario generated', 'success');
     setTimeout(() => { status.style.display = 'none'; status.style.color = ''; }, 3000);
     loadTabletops();
   } catch(e) {
     status.textContent = 'Generation failed — check Ollama is running';
     status.style.color = 'var(--red)';
+    toast('Tabletop generation failed', 'error');
     setTimeout(() => { status.style.display = 'none'; status.style.color = ''; }, 5000);
   } finally {
     btn.disabled = false;
@@ -811,6 +937,7 @@ function downloadReport() {
 })();
 </script>
 
+<div class="toast-container" id="portal-toast-container"></div>
 <script src="/nav-component.js"></script>
 </body>
 </html>

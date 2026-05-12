@@ -165,9 +165,20 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
 <div class="chipbar">
   <div class="stat-chips" id="chips"><span class="chip to">Connecting...</span></div>
   <span class="lsync" id="lsync">—</span>
-  <button class="bbtn" onclick="exportCurrentCSV()">&#8595; EXPORT</button>
+  <span class="lsync" style="color:var(--border2)">|</span>
+  <button class="bbtn" id="period-24h" onclick="setPeriod(1)">24H</button>
+  <button class="bbtn" id="period-7d"  onclick="setPeriod(7)">7D</button>
+  <button class="bbtn" id="period-30d" onclick="setPeriod(30)">30D</button>
+  <button class="bbtn on" id="period-all" onclick="setPeriod(0)">ALL</button>
+  <span class="lsync" style="color:var(--border2)">|</span>
+  <button class="bbtn" onclick="exportCurrentCSV()">&#8595; CSV</button>
+  <button class="bbtn" onclick="exportCurrentJSON()">&#8595; JSON</button>
+  <button class="bbtn" onclick="doReadAll()">&#10003; READ ALL</button>
+  <button class="bbtn" onclick="doRescoreAll()">&#9670; RESCORE</button>
+  <button class="bbtn" onclick="doPurge()">&#9851; PURGE</button>
   <button class="bbtn" id="rfbtn" onclick="doRefresh()">&#8635; REFRESH</button>
   <button class="bbtn on" id="autobtn" onclick="toggleAuto()">AUTO ON</button>
+  <button class="bbtn" onclick="showKeyboardHelp()" title="Keyboard shortcuts">?</button>
 </div>
 
 <!-- SIDEBAR -->
@@ -197,6 +208,23 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
     <div class="ni" data-comp="CMMC" onclick="navComp(this)"><span class="ndot" style="background:var(--purple)"></span>CMMC 2.0</div>
     <div class="ni" data-comp="NIST" onclick="navComp(this)"><span class="ndot" style="background:var(--blue)"></span>NIST 800-53</div>
     <div class="ni" data-comp="CIS" onclick="navComp(this)"><span class="ndot" style="background:var(--green)"></span>CIS Controls v8</div>
+  </div>
+  <div class="slabel" style="margin-top:2px;display:flex;align-items:center;justify-content:space-between">
+    <span>Feeds</span>
+    <span id="feeds-toggle" style="cursor:pointer;color:var(--teal);font-size:9px" onclick="toggleFeedsPanel()">▾</span>
+  </div>
+  <div id="feeds-panel" style="display:none"></div>
+  <div class="slabel" style="margin-top:2px;display:flex;align-items:center;justify-content:space-between">
+    <span>MISP</span>
+    <span id="misp-status-dot" style="width:6px;height:6px;border-radius:50%;background:var(--muted);display:inline-block"></span>
+  </div>
+  <div style="padding:0 8px 6px">
+    <div style="font-size:8px;color:var(--muted);margin-bottom:6px" id="misp-status-text">Checking…</div>
+    <div style="display:flex;gap:4px">
+      <button class="bbtn" style="font-size:8px;padding:2px 8px;margin:0;flex:1;text-align:left" onclick="syncMISP()">⟳ Sync</button>
+      <button class="bbtn" style="font-size:8px;padding:2px 8px;margin:0;flex:1;text-align:left" onclick="toggleMISPEvents()">Events</button>
+    </div>
+    <div id="misp-events-panel" style="display:none;margin-top:6px;max-height:200px;overflow-y:auto"></div>
   </div>
 </nav>
 
@@ -259,15 +287,16 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
 </div>
 
 <script>
-const API='http://localhost:8000/api/v1';
+const API='/api/v1';
 const SC={CRITICAL:'#f0595a',HIGH:'#e8a530',MEDIUM:'#4d9de0',LOW:'#4e5d72',INFO:'#9b8ef5'};
 const SO={CRITICAL:0,HIGH:1,MEDIUM:2,LOW:3,INFO:4};
-let S={items:[],sel:null,sev:'all',cat:null,sp:null,comp:null,q:'',sort:'date',offset:0,lim:100,auto:true};
+let S={items:[],sel:null,sev:'all',cat:null,sp:null,comp:null,q:'',sort:'date',offset:0,lim:100,auto:true,days:0};
 let srchT=null,autoT=null;
+function getToken(){return localStorage.getItem('token')||localStorage.getItem('pf_token')||'';}
 
 async function api(path,opts={}){
   try{
-    const r=await fetch(API+path,{...opts,headers:{'Content-Type':'application/json',...(opts.headers||{})}});
+    const r=await fetch(API+path,{...opts,headers:{'Content-Type':'application/json','Authorization':'Bearer '+getToken(),...(opts.headers||{})}});
     if(!r.ok)throw new Error(r.status);
     setConn(true);return await r.json();
   }catch(e){setConn(false);return null;}
@@ -289,6 +318,7 @@ async function load(app=false){
   if(S.q)p.set('search',S.q);
   if(S.comp)p.set('compliance',S.comp);
   if(S.sort==='risk')p.set('sort','risk');
+  if(S.days>0)p.set('days_back',S.days);
   const d=await api('/items?'+p);
   if(!d){render(app?S.items:[]);return;}
   S.items=app?[...S.items,...(d.items||[])]:d.items||[];
@@ -410,14 +440,20 @@ function renderDetail(i){
     <button class="qbtn" onclick="exportItemJSON('${esc2(i.id)}')">⬇ Export as JSON</button>
     <button class="qbtn" onclick="copyMarkdown('${esc2(i.title)}','${esc2(i.severity)}','${esc2(cves.join(','))}','${esc2(i.url||'')}')">⧉ Copy Markdown Advisory</button>
     <button class="qbtn" onclick="window.open('/api/v1/export/iocs.txt?days=7','_blank')">⬇ Export IOCs (7d)</button>
+    <button class="qbtn" id="rescore-btn-${esc2(i.id)}" onclick="rescoreItem('${esc2(i.id)}')">&#9670; Rescore This Item</button>
+    <button class="qbtn" id="misp-btn-${esc2(i.id)}" onclick="pushToMISP('${esc2(i.id)}')">⮕ Push to MISP</button>
   </div>
   <div class="dsec">
-    <div class="dlabel">IOC Enrichment</div>
+    <div class="dlabel" style="display:flex;align-items:center;justify-content:space-between">
+      <span>IOC Enrichment</span>
+      <button id="ioc-cache-btn" class="qbtn" style="margin:0;padding:2px 7px;font-size:8px" onclick="toggleIOCCache()">Recent Cache</button>
+    </div>
     <div style="display:flex;gap:4px;margin-top:4px">
       <input id="ioc-input" placeholder="IP / hash / domain / URL" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:9px;padding:5px 8px;outline:none" onkeydown="if(event.key==='Enter')lookupIOC()">
       <button class="qbtn" style="margin:0;padding:5px 10px" onclick="lookupIOC()">LOOKUP</button>
     </div>
     <div id="ioc-result" style="margin-top:6px;font-size:9px"></div>
+    <div id="ioc-cache" style="display:none;margin-top:8px;max-height:180px;overflow-y:auto"></div>
   </div>`;
 }
 
@@ -429,7 +465,7 @@ function qa(t,title,v,x){
     impact:`Help me assess client impact for: "${title}" affecting ${v} ${x}. What questions should I ask clients to determine exposure? What asset types are at risk?`
   };
   if(typeof sendPrompt==='function')sendPrompt(m[t]);
-  else{navigator.clipboard?.writeText(m[t]);alert('Prompt copied to clipboard');}
+  else{navigator.clipboard?.writeText(m[t]);showToast('Prompt copied to clipboard');}
 }
 
 function e(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -499,6 +535,92 @@ async function doRefresh(){
   },3500);
 }
 
+function setPeriod(days){
+  S.days=days;S.offset=0;
+  ['24h','7d','30d','all'].forEach(id=>{
+    const b=document.getElementById('period-'+id);
+    if(b)b.classList.remove('on');
+  });
+  const key=days===1?'24h':days===7?'7d':days===30?'30d':'all';
+  const b=document.getElementById('period-'+key);
+  if(b)b.classList.add('on');
+  load();
+}
+
+async function doPurge(){
+  if(!confirm('Purge all items older than the retention period? This cannot be undone.'))return;
+  const d=await api('/items/purge',{method:'DELETE'});
+  if(d)showToast(`Purged ${d.deleted||0} items`);
+  S.offset=0;await Promise.all([loadStats(),load()]);
+}
+
+async function rescoreItem(itemId){
+  const btn=document.getElementById('rescore-btn-'+itemId);
+  if(btn){btn.textContent='Rescoring...';btn.disabled=true;}
+  const d=await api('/items/'+itemId+'/rescore',{method:'POST'});
+  if(d&&d.risk_score!=null){
+    const item=S.items.find(i=>i.id===itemId);
+    if(item){item.risk_score=d.risk_score;renderDetail(item);}
+    showToast('Risk score updated: '+d.risk_score.toFixed(1));
+  }
+}
+
+let feedsOpen=false;
+function toggleFeedsPanel(){
+  feedsOpen=!feedsOpen;
+  const panel=document.getElementById('feeds-panel');
+  const toggle=document.getElementById('feeds-toggle');
+  if(!panel)return;
+  panel.style.display=feedsOpen?'':'none';
+  toggle.textContent=feedsOpen?'▴':'▾';
+  if(feedsOpen&&!panel.dataset.loaded)loadFeeds();
+}
+
+async function loadFeeds(){
+  const panel=document.getElementById('feeds-panel');
+  if(!panel)return;
+  panel.innerHTML='<div style="padding:4px 8px;font-size:9px;color:var(--muted)">Loading feeds...</div>';
+  try{
+    const d=await api('/feeds');
+    const feeds=Array.isArray(d)?d:(d&&d.feeds?d.feeds:[]);
+    if(!feeds.length){panel.innerHTML='<div style="padding:4px 8px;font-size:9px;color:var(--muted)">No feeds registered</div>';return;}
+    panel.dataset.loaded='1';
+    panel.innerHTML=feeds.map(f=>`
+      <div style="display:flex;align-items:center;padding:3px 8px;gap:6px">
+        <span style="flex:1;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e(f)}">${e(f)}</span>
+        <button style="font-family:var(--mono);font-size:8px;padding:1px 6px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer" onclick="refreshFeed('${e(f)}',this)">↻</button>
+      </div>`).join('');
+  }catch{panel.innerHTML='<div style="padding:4px 8px;font-size:9px;color:var(--muted)">Failed to load feeds</div>';}
+}
+
+async function refreshFeed(feedId,btn){
+  if(btn){btn.textContent='...';btn.disabled=true;}
+  await api('/refresh/'+encodeURIComponent(feedId),{method:'POST'});
+  if(btn){btn.textContent='↻';btn.disabled=false;}
+  showToast('Feed refresh triggered: '+feedId);
+  setTimeout(()=>Promise.all([loadStats(),load()]),3000);
+}
+
+async function doReadAll(){
+  await api('/items/read-all',{method:'POST'});
+  S.offset=0;
+  await Promise.all([loadStats(),load()]);
+  showToast('All items marked read');
+}
+
+async function doRescoreAll(){
+  showToast('Rescoring all items…');
+  await api('/rescore-all',{method:'POST'});
+  setTimeout(()=>Promise.all([loadStats(),load()]),4000);
+}
+
+function showToast(msg){
+  let t=document.getElementById('toast');
+  if(!t){t=document.createElement('div');t.id='toast';t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);color:var(--fg);padding:10px 20px;border-radius:6px;font-size:.85rem;z-index:9999;opacity:0;transition:opacity .3s';document.body.appendChild(t);}
+  t.textContent=msg;t.style.opacity='1';
+  clearTimeout(t._to);t._to=setTimeout(()=>t.style.opacity='0',3000);
+}
+
 function toggleAuto(){
   S.auto=!S.auto;
   const btn=document.getElementById('autobtn');
@@ -550,7 +672,7 @@ function showAiPanel(prompt){
 function closeAi(){document.getElementById('ai-overlay').classList.remove('show');}
 
 async function sendPrompt(text){
-  if(!ollamaModel){navigator.clipboard?.writeText(text);alert('Ollama offline — prompt copied to clipboard');return;}
+  if(!ollamaModel){navigator.clipboard?.writeText(text);showToast('Ollama offline — prompt copied to clipboard');return;}
   showAiPanel(text);
   try{
     const r=await fetch(OLLAMA+'/api/chat',{
@@ -592,7 +714,49 @@ async function lookupIOC(){
     if(d.vt_malicious!=null)lines.push(`<b>VirusTotal:</b> <span style="color:${d.vt_malicious>0?'var(--red)':'var(--green)'}">${d.vt_malicious}/${d.vt_total||'?'}</span>${d.vt_name?' — '+e(d.vt_name):''}`);
     if(!lines.length)lines.push('<span style="color:var(--muted)">No enrichment data available — add API keys to .env</span>');
     el.innerHTML=lines.join('<br>');
+    // Refresh cache view if open
+    const cacheEl=document.getElementById('ioc-cache');
+    if(cacheEl&&cacheEl.style.display!=='none')loadIOCCache();
   }catch(err){el.innerHTML='<span style="color:var(--red)">'+e(String(err))+'</span>';}
+}
+
+let iocCacheOpen=false;
+async function toggleIOCCache(){
+  iocCacheOpen=!iocCacheOpen;
+  const el=document.getElementById('ioc-cache');
+  const btn=document.getElementById('ioc-cache-btn');
+  if(!el||!btn)return;
+  el.style.display=iocCacheOpen?'':'none';
+  btn.textContent=iocCacheOpen?'Hide Cache':'Recent Cache';
+  if(iocCacheOpen)loadIOCCache();
+}
+
+async function loadIOCCache(){
+  const el=document.getElementById('ioc-cache');
+  if(!el)return;
+  el.innerHTML='<span style="color:var(--muted);font-size:9px">Loading...</span>';
+  try{
+    const r=await fetch(API+'/ioc/cache?limit=20');
+    if(!r.ok)throw new Error();
+    const d=await r.json();
+    const entries=d.entries||[];
+    if(!entries.length){el.innerHTML='<span style="color:var(--muted);font-size:9px">No cached lookups yet</span>';return;}
+    const iocVerdict=c=>{
+      if(c.vt_malicious>0||c.abuseipdb_score>50||c.greynoise_classification==='malicious')return'malicious';
+      if(c.greynoise_classification==='benign'&&(c.abuseipdb_score==null||c.abuseipdb_score<10))return'benign';
+      return'unknown';
+    };
+    const vcol={'malicious':'var(--red)','benign':'var(--green)','unknown':'var(--muted)'};
+    el.innerHTML=entries.map(c=>{
+      const v=iocVerdict(c);
+      const col=vcol[v];
+      return `<div style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)">
+        <span style="font-size:8px;color:${col};width:14px;flex-shrink:0">${v==='malicious'?'✗':v==='benign'?'✓':'?'}</span>
+        <span style="flex:1;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e(c.ioc_value||'')}">${e((c.ioc_value||'').slice(0,32))}</span>
+        <span style="font-size:8px;color:var(--muted);white-space:nowrap">${e(c.ioc_type||'')}</span>
+      </div>`;
+    }).join('');
+  }catch{el.innerHTML='<span style="color:var(--muted);font-size:9px">Cache unavailable</span>';}
 }
 
 function exportCurrentCSV() {
@@ -604,25 +768,150 @@ function exportCurrentCSV() {
   window.open('/api/v1/export/items.csv?' + params.toString(), '_blank');
 }
 
+function exportCurrentJSON() {
+  const params = new URLSearchParams();
+  if (S.sev && S.sev !== 'all') params.set('severity', S.sev);
+  if (S.cat) params.set('category', S.cat);
+  if (S.q) params.set('search', S.q);
+  if (S.sort) params.set('sort', S.sort);
+  window.open('/api/v1/export/items.json?' + params.toString(), '_blank');
+}
+
+async function loadMISPStatus() {
+  try {
+    const r = await fetch(API + '/misp/status', {headers:{'Authorization':'Bearer '+getToken()}});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    const dot = document.getElementById('misp-status-dot');
+    const txt = document.getElementById('misp-status-text');
+    if (!dot || !txt) return;
+    const ok = d.connected || d.status === 'ok';
+    dot.style.background = ok ? 'var(--green)' : 'var(--red)';
+    txt.textContent = ok ? `Connected · ${d.event_count||0} events` : (d.error || 'Not connected');
+  } catch {
+    const txt = document.getElementById('misp-status-text');
+    if (txt) txt.textContent = 'Status unavailable';
+  }
+}
+
+async function syncMISP() {
+  const r = await fetch(API + '/misp/sync', {method:'POST', headers:{'Authorization':'Bearer '+getToken()}});
+  showToast(r.ok ? 'MISP sync triggered' : 'MISP sync failed');
+  if (r.ok) setTimeout(loadMISPStatus, 5000);
+}
+
+async function toggleMISPEvents() {
+  const panel = document.getElementById('misp-events-panel');
+  if (!panel) return;
+  if (panel.style.display !== 'none') { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  panel.innerHTML = '<div style="padding:8px;font-size:8px;color:var(--muted)">Loading…</div>';
+  try {
+    const r = await fetch(API + '/misp/events?limit=20', {headers:{'Authorization':'Bearer '+getToken()}});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    const events = d.events || [];
+    if (!events.length) { panel.innerHTML = '<div style="padding:8px;font-size:8px;color:var(--muted)">No MISP events yet</div>'; return; }
+    panel.innerHTML = events.map(ev => `
+      <div style="padding:5px 4px;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer" onclick="pick('${e(ev.id)}')">
+        <div style="font-size:8px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e(ev.title||ev.feed_label||ev.id)}</div>
+        <div style="font-size:7px;color:var(--muted);margin-top:1px">${(ev.published_at||ev.ingested_at||'').slice(0,10)} · ${e(ev.severity||'—')}</div>
+      </div>`
+    ).join('');
+  } catch(err) {
+    panel.innerHTML = `<div style="padding:8px;font-size:8px;color:var(--red)">Error: ${err.message}</div>`;
+  }
+}
+
+async function pushToMISP(itemId) {
+  const btn = document.getElementById('misp-btn-' + itemId);
+  if (btn) { btn.textContent = 'Pushing...'; btn.disabled = true; }
+  try {
+    const r = await fetch(API + '/misp/push/' + itemId, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken()}
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Push failed');
+    showToast(d.message || 'Pushed to MISP');
+    if (btn) { btn.textContent = '✓ Pushed to MISP'; }
+  } catch(err) {
+    showToast('MISP push failed: ' + err.message);
+    if (btn) { btn.textContent = '⮕ Push to MISP'; btn.disabled = false; }
+  }
+}
+
 async function exportItemJSON(itemId) {
   try {
-    const r = await fetch('/api/v1/items/' + itemId);
+    const r = await fetch('/api/v1/items/' + itemId, {headers:{'Authorization':'Bearer '+getToken()}});
     const data = await r.json();
     const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'item_' + itemId.slice(0, 8) + '.json';
     a.click();
-  } catch(err) { alert('Export failed: ' + err.message); }
+  } catch(err) { showToast('Export failed: ' + err.message); }
 }
 
 function copyMarkdown(title, severity, cves, url) {
   const md = `## [${severity}] ${title}\n\n**CVEs:** ${cves || 'N/A'}\n**Severity:** ${severity}\n**Reference:** ${url || 'N/A'}\n\n*Generated by PhantomFeed*`;
   navigator.clipboard?.writeText(md);
-  alert('Markdown advisory copied to clipboard');
+  showToast('Markdown advisory copied to clipboard');
 }
 
-(async()=>{showSkel();await Promise.all([loadStats(),load(),loadOllamaStatus()]);sched();})();
+(async()=>{showSkel();await Promise.all([loadStats(),load(),loadOllamaStatus()]);loadMISPStatus();sched();})();
+
+// ── Keyboard shortcuts ─────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (e.key === 'j' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    const idx = S.items.findIndex(i => i.id === S.sel);
+    const next = S.items[idx + 1];
+    if (next) pick(next.id);
+  } else if (e.key === 'k' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const idx = S.items.findIndex(i => i.id === S.sel);
+    const prev = S.items[Math.max(0, idx - 1)];
+    if (prev) pick(prev.id);
+  } else if (e.key === 'Escape') {
+    S.sel = null;
+    document.querySelectorAll('.fitem').forEach(el => el.classList.remove('sel'));
+    document.getElementById('dpane').innerHTML = '<div class="dempty"><div class="dempty-ico">&#9632;</div><div>Select an item to view details</div></div>';
+  } else if (e.key === 'r' && !e.ctrlKey && !e.metaKey) {
+    doRefresh();
+  } else if (e.key === 'a' && !e.ctrlKey && !e.metaKey) {
+    doReadAll();
+  } else if (e.key === '?') {
+    showKeyboardHelp();
+  }
+});
+
+function showKeyboardHelp() {
+  const existing = document.getElementById('kb-help-overlay');
+  if (existing) { existing.remove(); return; }
+  const el = document.createElement('div');
+  el.id = 'kb-help-overlay';
+  el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer';
+  el.onclick = () => el.remove();
+  el.innerHTML = `<div style="background:#0c0f14;border:1px solid rgba(255,255,255,.12);padding:24px;min-width:320px;cursor:default" onclick="event.stopPropagation()">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;color:#00d4aa;margin-bottom:14px">KEYBOARD SHORTCUTS</div>
+    ${[
+      ['j / ↓', 'Next item'],
+      ['k / ↑', 'Previous item'],
+      ['Esc', 'Clear selection'],
+      ['r', 'Refresh feed'],
+      ['a', 'Mark all read'],
+      ['?', 'Toggle this help'],
+    ].map(([k,v]) => `<div style="display:flex;gap:16px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:9px">
+      <span style="font-family:'JetBrains Mono',monospace;color:#00d4aa;min-width:60px">${k}</span>
+      <span style="color:#c9d4e3">${v}</span>
+    </div>`).join('')}
+    <div style="margin-top:10px;font-size:8px;color:#4e5d72;text-align:center">Click anywhere to close</div>
+  </div>`;
+  document.body.appendChild(el);
+}
 </script>
 <script src="/nav-component.js"></script>
 </body>

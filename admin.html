@@ -89,9 +89,14 @@ input[type=file]{display:none}
   <!-- Client sidebar -->
   <div class="sidebar">
     <div class="slabel">Clients</div>
+    <div style="padding:4px 8px;background:var(--bg2);border-bottom:1px solid var(--border)">
+      <input type="text" id="client-search" placeholder="Search clients..." oninput="filterClientList()" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:9px;padding:5px 8px;outline:none">
+    </div>
     <div id="client-list"></div>
-    <div style="padding:10px 12px;border-top:1px solid var(--border);margin-top:8px">
+    <div style="padding:10px 12px;border-top:1px solid var(--border);margin-top:8px;display:flex;flex-direction:column;gap:6px">
       <button class="btn sm" style="width:100%" onclick="showNewClientForm()">+ New Client</button>
+      <button class="btn sm" style="width:100%" onclick="showGlobalAuditView()">&#9776; Global Audit Log</button>
+      <button class="btn sm" style="width:100%" onclick="exportGlobalAudit()">&#8595; Global Audit CSV</button>
     </div>
   </div>
 
@@ -110,6 +115,78 @@ input[type=file]{display:none}
 
 <div class="toast-container" id="toast-container"></div>
 
+<!-- Edit Client Modal -->
+<div id="edit-client-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:4px;width:400px;max-width:95vw;padding:24px">
+    <div style="font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--teal);margin-bottom:16px">EDIT CLIENT</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div>
+        <div style="font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:4px">CLIENT NAME *</div>
+        <input id="ec-name" type="text" class="finput" placeholder="Acme Corporation">
+      </div>
+      <div>
+        <div style="font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:4px">CONTACT EMAIL</div>
+        <input id="ec-email" type="email" class="finput" placeholder="security@acme.com">
+      </div>
+      <div>
+        <div style="font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:4px">INDUSTRY</div>
+        <select id="ec-industry" class="finput" style="cursor:pointer">
+          <option value="">Select industry...</option>
+          <option value="Financial Services">Financial Services</option>
+          <option value="Healthcare">Healthcare</option>
+          <option value="Defense">Defense / Government</option>
+          <option value="Technology">Technology</option>
+          <option value="Manufacturing">Manufacturing</option>
+          <option value="Energy">Energy / Utilities</option>
+          <option value="Retail">Retail / E-Commerce</option>
+          <option value="Education">Education</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button class="btn sm" onclick="closeEditModal()">Cancel</button>
+      <button class="btn sm primary" id="ec-submit-btn" onclick="submitEditClient()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- New Client Modal -->
+<div id="new-client-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:4px;width:400px;max-width:95vw;padding:24px">
+    <div style="font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--teal);margin-bottom:16px">NEW CLIENT</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div>
+        <div style="font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:4px">CLIENT NAME *</div>
+        <input id="nc-name" type="text" class="finput" placeholder="Acme Corporation">
+      </div>
+      <div>
+        <div style="font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:4px">CONTACT EMAIL</div>
+        <input id="nc-email" type="email" class="finput" placeholder="security@acme.com">
+      </div>
+      <div>
+        <div style="font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:4px">INDUSTRY</div>
+        <select id="nc-industry" class="finput" style="cursor:pointer">
+          <option value="">Select industry...</option>
+          <option value="Financial Services">Financial Services</option>
+          <option value="Healthcare">Healthcare</option>
+          <option value="Defense">Defense / Government</option>
+          <option value="Technology">Technology</option>
+          <option value="Manufacturing">Manufacturing</option>
+          <option value="Energy">Energy / Utilities</option>
+          <option value="Retail">Retail / E-Commerce</option>
+          <option value="Education">Education</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button class="btn sm" onclick="closeNewClientModal()">Cancel</button>
+      <button class="btn sm primary" id="nc-submit-btn" onclick="submitNewClient()">Create Client</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API = '/api/v1';
 let clients = [];
@@ -125,11 +202,18 @@ function toast(msg, type='info', dur=3000) {
 
 function getToken() { return localStorage.getItem('token')||localStorage.getItem('pf_token')||''; }
 
+function exportGlobalAudit() {
+  const a = document.createElement('a');
+  a.href = `${API}/audit/export.csv?token=${encodeURIComponent(getToken())}`;
+  a.download = 'audit-global.csv';
+  a.click();
+}
+
 async function loadClients() {
   try {
     const r = await fetch(API+'/admin/clients', {headers:{'Authorization':'Bearer '+getToken()}});
     if (!r.ok) { document.getElementById('sb-status').textContent='AUTH REQUIRED'; return; }
-    clients = (await r.json()).clients || [];
+    const raw = await r.json(); clients = Array.isArray(raw) ? raw : (raw.clients || []);
     renderClientList();
     document.getElementById('sb-dot').style.background='var(--green)';
     document.getElementById('sb-status').textContent='● CONNECTED — '+clients.length+' clients';
@@ -139,15 +223,27 @@ async function loadClients() {
   }
 }
 
-function renderClientList() {
+function renderClientList(filtered) {
   const el = document.getElementById('client-list');
+  const list = filtered || clients;
   if (!clients.length) { el.innerHTML='<div class="empty">No clients yet</div>'; return; }
-  el.innerHTML = clients.map(c => `
+  if (!list.length) { el.innerHTML='<div class="empty">No clients match</div>'; return; }
+  el.innerHTML = list.map(c => `
     <div class="cl-item${selectedClient&&selectedClient.id===c.id?' active':''}" onclick="selectClient('${c.id}')">
       <div class="cl-name">${esc(c.name)}</div>
       <div class="cl-email">${esc(c.contact_email||'')}</div>
     </div>
   `).join('');
+}
+
+function filterClientList() {
+  const q = (document.getElementById('client-search')?.value || '').toLowerCase();
+  if (!q) { renderClientList(); return; }
+  renderClientList(clients.filter(c =>
+    c.name.toLowerCase().includes(q) ||
+    (c.contact_email || '').toLowerCase().includes(q) ||
+    (c.industry || '').toLowerCase().includes(q)
+  ));
 }
 
 function selectClient(id) {
@@ -166,6 +262,7 @@ function renderClientPanel() {
         <div style="font-size:9px;color:var(--muted)">${esc(c.contact_email||'')} &nbsp;·&nbsp; ID: ${c.id.slice(0,8)}</div>
       </div>
       <div style="display:flex;gap:8px">
+        <button class="btn sm" onclick="showEditClient()">✎ Edit</button>
         <button class="btn sm" onclick="window.open('/upload.html','_self')">⬆ Upload Scan</button>
         <button class="btn sm danger" onclick="deleteClient('${c.id}')">✕ Delete</button>
       </div>
@@ -275,13 +372,13 @@ async function doUploadAssets(file) {
   fd.append('file', file);
   toast('Uploading assets...', 'info', 0);
   try {
-    const r = await fetch(`${API}/upload/assets?client_id=${selectedClient.id}`, {method:'POST', body:fd});
+    const r = await fetch(`${API}/upload/assets?client_id=${selectedClient.id}`, {method:'POST', headers:{'Authorization':'Bearer '+getToken()}, body:fd});
     document.querySelector('.toast').remove();
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail);
     const uploadId = data.upload_id;
     // Auto-confirm
-    const r2 = await fetch(`${API}/upload/assets/${uploadId}/confirm`, {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    const r2 = await fetch(`${API}/upload/assets/${uploadId}/confirm`, {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+getToken()}, body:'{}'});
     const d2 = await r2.json();
     toast(`Imported ${d2.imported_assets} assets`, 'success');
     loadAssetsTab();
@@ -306,7 +403,7 @@ function exportAssets() {
 async function runMatching() {
   toast('Running CPE matching...', 'info', 0);
   try {
-    const r = await fetch(`${API}/refresh`, {method:'POST'});
+    const r = await fetch(`${API}/refresh`, {method:'POST', headers:{'Authorization':'Bearer '+getToken()}});
     document.querySelector('.toast')?.remove();
     toast('Matching triggered — check logs', 'success');
   } catch(e) { toast('Error: '+e.message, 'error'); }
@@ -318,7 +415,7 @@ async function loadHistoryTab() {
   if (!el) return;
   el.innerHTML = '<span class="spinner"></span>';
   try {
-    const r = await fetch(`${API}/upload/history?client_id=${selectedClient.id}`);
+    const r = await fetch(`${API}/upload/history?client_id=${selectedClient.id}`, {headers:{Authorization:'Bearer '+getToken()}});
     const rows = r.ok ? await r.json() : [];
     el.innerHTML = `
       <div class="section-header">Import History</div>
@@ -367,6 +464,49 @@ function renderExportTab() {
         <span style="flex:1;font-size:10px">Detection Rules</span>
         <span style="font-size:9px;color:var(--muted)">SPL + KQL + Sigma ZIP</span>
         <button class="btn sm primary" onclick="window.open('${API}/clients/${id}/export/detection-rules.zip','_blank')">⬇ ZIP</button>
+        <button class="btn sm" onclick="toggleGithubForm('${id}')">⮕ GitHub</button>
+      </div>
+      <div id="github-push-form" style="display:none;background:var(--bg4);border:1px solid var(--border);border-top:none;padding:12px 14px">
+        <div style="font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:10px">PUSH DETECTION RULES TO GITHUB</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <label style="font-size:9px;color:var(--muted);display:block">Repository (owner/repo)
+            <input id="gh-repo" type="text" class="finput" placeholder="acme-corp/security-rules" style="margin-top:3px">
+          </label>
+          <label style="font-size:9px;color:var(--muted);display:block">Branch
+            <input id="gh-branch" type="text" class="finput" placeholder="main" style="margin-top:3px" value="main">
+          </label>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <label style="font-size:9px;color:var(--muted);display:block">GitHub Token (PAT)
+            <input id="gh-token" type="password" class="finput" placeholder="ghp_..." style="margin-top:3px">
+          </label>
+          <label style="font-size:9px;color:var(--muted);display:block">Path in repo
+            <input id="gh-path" type="text" class="finput" placeholder="detection-rules" style="margin-top:3px" value="detection-rules">
+          </label>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn sm primary" onclick="pushRulesToGitHub('${id}')">PUSH TO GITHUB</button>
+          <span id="gh-result" style="font-size:9px;display:none"></span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--bg3);border:1px solid var(--border)">
+        <span style="flex:1;font-size:10px">IOC Feed</span>
+        <span style="font-size:9px;color:var(--muted)">Indicators of compromise</span>
+        <select id="ioc-days-admin" style="font-family:var(--mono);font-size:8px;background:var(--bg4);border:1px solid var(--border);color:var(--text);padding:3px 6px;outline:none">
+          <option value="7" selected>7 days</option><option value="30">30 days</option><option value="90">90 days</option>
+        </select>
+        <button class="btn sm" onclick="window.open('${API}/export/iocs.txt?days='+document.getElementById('ioc-days-admin').value,'_blank')">⬇ TXT</button>
+        <button class="btn sm" onclick="window.open('${API}/export/iocs.csv?days='+document.getElementById('ioc-days-admin').value,'_blank')">⬇ CSV</button>
+        <button class="btn sm primary" onclick="window.open('${API}/export/iocs.stix?days='+document.getElementById('ioc-days-admin').value,'_blank')">⬇ STIX 2.1</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--bg3);border:1px solid rgba(155,142,245,0.25)">
+        <span style="flex:1;font-size:10px;color:var(--purple)">Email Digest</span>
+        <span style="font-size:9px;color:var(--muted)">Send threat summary to client contact</span>
+        <select id="digest-days-admin" style="font-family:var(--mono);font-size:8px;background:var(--bg4);border:1px solid var(--border);color:var(--text);padding:3px 6px;outline:none">
+          <option value="7" selected>7 days</option><option value="30">30 days</option>
+        </select>
+        <button class="btn sm primary" id="digest-btn" onclick="sendDigest('${id}')">✉ SEND DIGEST</button>
+        <span id="digest-result" style="font-size:9px;display:none"></span>
       </div>
       <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--bg3);border:1px solid var(--border)">
         <span style="flex:1;font-size:10px">PDF Threat Report</span>
@@ -374,7 +514,20 @@ function renderExportTab() {
         <select id="rpt-days-admin" style="font-family:var(--mono);font-size:8px;background:var(--bg4);border:1px solid var(--border);color:var(--text);padding:3px 6px;outline:none">
           <option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option>
         </select>
+        <button class="btn sm" onclick="window.open('${API}/clients/${id}/report.html?days='+document.getElementById('rpt-days-admin').value,'_blank')">Preview HTML</button>
         <button class="btn sm primary" onclick="downloadClientReport('${id}')">⬇ PDF</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--bg3);border:1px solid rgba(59,130,246,0.25)">
+        <div style="flex:1">
+          <div style="font-size:10px;color:#60a5fa">FedRAMP OSCAL Bundle</div>
+          <div style="font-size:8px;color:var(--muted);margin-top:2px">POA&amp;M · SAR · VDR · OAR · SSP as XML/JSON</div>
+        </div>
+        <button class="btn sm" onclick="window.open('${API}/clients/${id}/oscal/poam.xml?token='+getToken(),'_blank')">POA&amp;M</button>
+        <button class="btn sm" onclick="window.open('${API}/clients/${id}/oscal/sar.xml?token='+getToken(),'_blank')">SAR</button>
+        <button class="btn sm" onclick="window.open('${API}/clients/${id}/oscal/vdr.json?token='+getToken(),'_blank')">VDR</button>
+        <button class="btn sm" onclick="window.open('${API}/clients/${id}/oscal/oar.json?token='+getToken(),'_blank')">OAR</button>
+        <button class="btn sm" onclick="window.open('${API}/clients/${id}/oscal/ssp.xml?token='+getToken(),'_blank')">SSP</button>
+        <button class="btn sm primary" onclick="window.open('${API}/clients/${id}/oscal/bundle.zip?token='+getToken(),'_blank')">⬇ Bundle ZIP</button>
       </div>
       <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--bg3);border:1px solid rgba(0,212,170,0.2)">
         <span style="flex:1;font-size:10px;color:var(--teal)">Executive Briefing Deck</span>
@@ -391,6 +544,64 @@ function renderExportTab() {
       <div id="deck-slides-list" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px"></div>
     </div>
   `;
+}
+
+function toggleGithubForm(clientId) {
+  const el = document.getElementById('github-push-form');
+  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
+async function pushRulesToGitHub(clientId) {
+  const repo   = document.getElementById('gh-repo')?.value.trim();
+  const token  = document.getElementById('gh-token')?.value.trim();
+  const branch = document.getElementById('gh-branch')?.value.trim() || 'main';
+  const path   = document.getElementById('gh-path')?.value.trim() || 'detection-rules';
+  const res    = document.getElementById('gh-result');
+  if (!repo || !token) { toast('Repo and GitHub token are required', 'error'); return; }
+  res.style.display = '';
+  res.style.color   = 'var(--muted)';
+  res.textContent   = 'Pushing rules...';
+  try {
+    const r = await fetch(`${API}/clients/${clientId}/export/push-rules-github`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', Authorization: 'Bearer ' + getToken()},
+      body: JSON.stringify({repo, token, branch, path}),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Push failed');
+    const pushed = d.pushed || [];
+    res.style.color = 'var(--green)';
+    res.textContent = `Pushed ${pushed.length} rule file(s) to ${repo}/${branch}/${path}`;
+    toast(`Detection rules pushed to GitHub (${pushed.length} files)`, 'success');
+  } catch(e) {
+    res.style.color = 'var(--red)';
+    res.textContent = 'Error: ' + e.message;
+    toast('Push failed: ' + e.message, 'error');
+  }
+}
+
+async function sendDigest(clientId) {
+  const btn = document.getElementById('digest-btn');
+  const res = document.getElementById('digest-result');
+  const days = document.getElementById('digest-days-admin')?.value || 7;
+  btn.disabled = true; btn.textContent = 'SENDING...';
+  res.style.display = ''; res.style.color = 'var(--muted)'; res.textContent = 'Sending email...';
+  try {
+    const r = await fetch(`${API}/admin/clients/${clientId}/send-digest?days=${days}`, {
+      method: 'POST', headers: {'Authorization': 'Bearer ' + getToken()}
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Send failed');
+    res.style.color = 'var(--green)';
+    res.textContent = d.message || 'Digest sent';
+    toast('Email digest sent', 'success');
+  } catch(e) {
+    res.style.color = 'var(--red)';
+    res.textContent = 'Error: ' + e.message;
+    toast('Digest failed: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '✉ SEND DIGEST';
+  }
 }
 
 function downloadClientReport(clientId) {
@@ -484,9 +695,10 @@ async function createClientUser() {
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || 'Error');
+    const creds = `${username} / ${password}`;
     const res = document.getElementById('nu-result');
     res.style.display = 'block';
-    res.textContent = `Created: ${username} / ${password}  (copy these credentials — password not stored in plaintext)`;
+    res.innerHTML = `<span style="color:var(--teal)">${esc(creds)}</span>&nbsp;&nbsp;<button onclick="navigator.clipboard?.writeText('${username} / ${password}').then(()=>this.textContent='✓ Copied!');setTimeout(()=>this.textContent='Copy',2000)" style="font-family:var(--mono);font-size:8px;padding:2px 6px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer">Copy</button><br><span style="font-size:8px;color:var(--muted)">Password shown once — not stored in plaintext</span>`;
     toast('User created', 'success');
     loadUsersTab();
   } catch(e) { toast('Error: '+e.message, 'error'); }
@@ -494,20 +706,35 @@ async function createClientUser() {
 
 // ── New client form ────────────────────────────────────────────────────────────
 function showNewClientForm() {
-  const name = prompt('Client name:');
-  if (!name) return;
-  const email = prompt('Contact email (optional):') || '';
-  createClient(name, email);
+  const modal = document.getElementById('new-client-modal');
+  modal.style.display = 'flex';
+  document.getElementById('nc-name').value = '';
+  document.getElementById('nc-email').value = '';
+  document.getElementById('nc-industry').value = '';
+  setTimeout(() => document.getElementById('nc-name').focus(), 50);
 }
 
-async function createClient(name, email) {
+function closeNewClientModal() {
+  document.getElementById('new-client-modal').style.display = 'none';
+}
+
+async function submitNewClient() {
+  const name = document.getElementById('nc-name').value.trim();
+  if (!name) { toast('Client name is required', 'error'); return; }
+  const btn = document.getElementById('nc-submit-btn');
+  btn.disabled = true; btn.textContent = 'Creating...';
+  await createClient(name, document.getElementById('nc-email').value.trim(), document.getElementById('nc-industry').value);
+  btn.disabled = false; btn.textContent = 'Create Client';
+}
+
+async function createClient(name, email, industry) {
   try {
     const r = await fetch(`${API}/admin/clients`, {
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+getToken()},
-      body: JSON.stringify({name, contact_email:email, stack_profile:{}}),
+      body: JSON.stringify({name, contact_email: email || '', industry: industry || '', stack_profile:{}}),
     });
-    if (r.ok) { toast('Client created','success'); await loadClients(); }
+    if (r.ok) { closeNewClientModal(); toast('Client created','success'); await loadClients(); }
     else { const d = await r.json(); throw new Error(d.detail); }
   } catch(e) { toast('Error: '+e.message,'error'); }
 }
@@ -515,8 +742,54 @@ async function createClient(name, email) {
 async function deleteClient(id) {
   if (!confirm('Delete this client and all their data? This cannot be undone.')) return;
   const r = await fetch(`${API}/admin/clients/${id}`, {method:'DELETE', headers:{'Authorization':'Bearer '+getToken()}});
-  if (r.ok) { toast('Client deleted','success'); selectedClient=null; document.getElementById('main-panel').innerHTML='<div class="empty">Client deleted</div>'; await loadClients(); }
+  if (r.ok) { toast('Client deleted','success'); selectedClient=null; await loadClients(); loadSystemOverview(); }
   else toast('Delete failed','error');
+}
+
+// ── Edit client ────────────────────────────────────────────────────────────────
+function showEditClient() {
+  if (!selectedClient) return;
+  const c = selectedClient;
+  document.getElementById('ec-name').value = c.name || '';
+  document.getElementById('ec-email').value = c.contact_email || '';
+  document.getElementById('ec-industry').value = c.industry || '';
+  const modal = document.getElementById('edit-client-modal');
+  modal.style.display = 'flex';
+  document.getElementById('ec-name').focus();
+}
+
+function closeEditModal() {
+  document.getElementById('edit-client-modal').style.display = 'none';
+}
+
+async function submitEditClient() {
+  if (!selectedClient) return;
+  const name = document.getElementById('ec-name').value.trim();
+  if (!name) { toast('Client name is required', 'error'); return; }
+  const email = document.getElementById('ec-email').value.trim();
+  const industry = document.getElementById('ec-industry').value;
+  const btn = document.getElementById('ec-submit-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const r = await fetch(`${API}/admin/clients/${selectedClient.id}`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken()},
+      body: JSON.stringify({name, contact_email: email, industry}),
+    });
+    if (!r.ok) { const d = await r.json().catch(()=>{}); throw new Error(d?.detail || r.statusText); }
+    const updated = await r.json();
+    selectedClient = {...selectedClient, ...updated};
+    const idx = clients.findIndex(c => c.id === selectedClient.id);
+    if (idx !== -1) clients[idx] = selectedClient;
+    closeEditModal();
+    renderClientList();
+    renderClientPanel();
+    toast('Client updated', 'success');
+  } catch(e) {
+    toast('Update failed: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save Changes';
+  }
 }
 
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -834,6 +1107,7 @@ async function loadWebhooksTab() {
               <td><span style="font-size:8px;color:${wh.is_active?'var(--green)':'var(--muted)'}">${wh.is_active?'ACTIVE':'PAUSED'}</span></td>
               <td style="display:flex;gap:4px">
                 <button class="btn sm primary" onclick="testWebhook('${esc(wh.id)}')">TEST</button>
+                <button class="btn sm" onclick="toggleWebhook('${esc(wh.id)}',${wh.is_active?1:0})">${wh.is_active?'PAUSE':'RESUME'}</button>
                 <button class="btn sm danger"  onclick="deleteWebhook('${esc(wh.id)}')">DELETE</button>
               </td>
             </tr>
@@ -927,7 +1201,220 @@ async function deleteWebhook(whId) {
   } catch(e) { toast('Error: ' + e.message, 'error'); }
 }
 
-loadClients();
+async function toggleWebhook(whId, currentlyActive) {
+  const newState = currentlyActive ? 0 : 1;
+  try {
+    const r = await fetch(`${API}/admin/clients/${selectedClient.id}/webhooks/${whId}`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json', Authorization: 'Bearer ' + getToken()},
+      body: JSON.stringify({is_active: newState}),
+    });
+    if (!r.ok) throw new Error('Update failed');
+    toast(newState ? 'Webhook resumed' : 'Webhook paused', 'success');
+    loadWebhooksTab();
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeNewClientModal(); closeEditModal(); }
+});
+document.addEventListener('click', e => {
+  const m = document.getElementById('new-client-modal');
+  if (m && e.target === m) closeNewClientModal();
+  const em = document.getElementById('edit-client-modal');
+  if (em && e.target === em) closeEditModal();
+});
+
+async function loadSystemOverview() {
+  const panel = document.getElementById('main-panel');
+  if (selectedClient) return;
+  panel.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)"><span class="spinner"></span><br>Loading system overview…</div>';
+
+  const [ksiRes, scannersRes, siemsRes] = await Promise.allSettled([
+    fetch(`${API}/ksi/summary`, {headers:{Authorization:'Bearer '+getToken()}}).then(r=>r.ok?r.json():null),
+    fetch(`${API}/scanners/status`, {headers:{Authorization:'Bearer '+getToken()}}).then(r=>r.ok?r.json():null),
+    fetch(`${API}/siems/status`, {headers:{Authorization:'Bearer '+getToken()}}).then(r=>r.ok?r.json():null),
+  ]);
+  if (selectedClient) return;
+
+  const ksi = ksiRes.status==='fulfilled' ? ksiRes.value : null;
+  const scanners = scannersRes.status==='fulfilled' ? scannersRes.value : null;
+  const siems = siemsRes.status==='fulfilled' ? siemsRes.value : null;
+
+  const ksiAgg = ksi?.aggregate || {};
+  const passRate = ksiAgg.pass_rate != null ? (ksiAgg.pass_rate * 100).toFixed(0) + '%' : '—';
+  const totalKsi = ksiAgg.total_ksi || 0;
+  const totalPass = ksiAgg.total_passing || 0;
+
+  const scList = scanners?.scanners || [];
+  const scActive = scList.filter(s=>s.is_active).length;
+  const scErr = scList.filter(s=>s.last_status && s.last_status.startsWith('error')).length;
+
+  const siList = siems?.siems || [];
+  const siActive = siList.filter(s=>s.is_active).length;
+
+  panel.innerHTML = `
+    <div class="section-header" style="margin-bottom:20px">System Overview</div>
+    <div class="stat-row" style="margin-bottom:24px">
+      <div class="stat-card">
+        <div class="stat-val">${clients.length}</div>
+        <div class="stat-label">Active Clients</div>
+      </div>
+      <div class="stat-card" style="border-color:rgba(${totalKsi&&totalPass===totalKsi?'61,214,140':'240,89,90'},.2)">
+        <div class="stat-val" style="color:${totalKsi&&totalPass===totalKsi?'var(--green)':'var(--amber)'}">${passRate}</div>
+        <div class="stat-label">Cross-Client KSI Pass Rate</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" style="color:${scErr>0?'var(--red)':'var(--green)'}">${scActive}<span style="font-size:12px;color:var(--muted)">/${scList.length}</span></div>
+        <div class="stat-label">Scanners Active</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val">${siActive}<span style="font-size:12px;color:var(--muted)">/${siList.length}</span></div>
+        <div class="stat-label">SIEMs Active</div>
+      </div>
+    </div>
+
+    ${ksi?.clients?.length ? `
+    <div class="section-header">KSI — Per Client</div>
+    <table style="margin-bottom:24px">
+      <thead><tr><th>Client</th><th>Passing</th><th>Conditional</th><th>Failing</th><th>Status</th></tr></thead>
+      <tbody>${ksi.clients.map(c=>{
+        const col = c.authorization_status==='authorized'?'var(--green)':c.authorization_status==='conditional'?'var(--amber)':'var(--red)';
+        return `<tr>
+          <td style="font-weight:600">${esc(c.client_name||c.client_id)}</td>
+          <td style="color:var(--green)">${c.passing||0}</td>
+          <td style="color:var(--amber)">${c.conditional||0}</td>
+          <td style="color:var(--red)">${c.failing||0}</td>
+          <td><span style="font-size:8px;font-weight:700;color:${col}">${(c.authorization_status||'unknown').toUpperCase().replace(/-/g,' ')}</span></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>` : ''}
+
+    ${scList.length ? `
+    <div class="section-header">Active Scanners</div>
+    <table style="margin-bottom:24px">
+      <thead><tr><th>Client</th><th>Scanner</th><th>Label</th><th>Status</th><th>Last Polled</th></tr></thead>
+      <tbody>${scList.map(s=>{
+        const ok = (s.last_status||'').startsWith('ok');
+        return `<tr>
+          <td style="font-size:8px;color:var(--muted)">${esc(s.client_id?.slice(0,8)||'—')}</td>
+          <td><span style="font-size:8px;color:var(--teal);text-transform:uppercase">${esc(s.scanner_type)}</span></td>
+          <td>${esc(s.label)}</td>
+          <td style="font-size:8px;color:${ok?'var(--green)':s.last_status?'var(--amber)':'var(--muted)'}">${esc((s.last_status||'never').slice(0,40))}</td>
+          <td style="font-size:8px;color:var(--muted)">${(s.last_polled||'Never').slice(0,16)}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>` : ''}
+
+    ${siList.length ? `
+    <div class="section-header">Active SIEMs</div>
+    <table>
+      <thead><tr><th>Client</th><th>SIEM</th><th>Label</th><th>Status</th><th>Last Polled</th></tr></thead>
+      <tbody>${siList.map(s=>{
+        const ok = (s.last_status||'').startsWith('ok');
+        return `<tr>
+          <td style="font-size:8px;color:var(--muted)">${esc(s.client_id?.slice(0,8)||'—')}</td>
+          <td><span style="font-size:8px;color:var(--purple);text-transform:uppercase">${esc(s.siem_type)}</span></td>
+          <td>${esc(s.label)}</td>
+          <td style="font-size:8px;color:${ok?'var(--green)':s.last_status?'var(--amber)':'var(--muted)'}">${esc((s.last_status||'never').slice(0,40))}</td>
+          <td style="font-size:8px;color:var(--muted)">${(s.last_polled||'Never').slice(0,16)}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>` : ''}
+
+    ${!scList.length && !siList.length ? '<div class="empty" style="margin-top:20px">No scanners or SIEMs configured yet. Select a client to add integrations.</div>' : ''}
+  `;
+}
+
+// ── Global Audit Log view ──────────────────────────────────────────────────────
+let _gaOffset = 0;
+const _gaLimit = 100;
+
+function showGlobalAuditView() {
+  selectedClient = null;
+  renderClientList();
+  const panel = document.getElementById('main-panel');
+  panel.innerHTML = `
+    <div class="section-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <span>Global Audit Log</span>
+      <div style="display:flex;gap:6px">
+        <button class="btn sm" onclick="loadSystemOverview()">&#8592; System Overview</button>
+        <a href="${API}/audit/export.csv?token=${getToken()}" download class="btn sm primary">&#8595; Export CSV</a>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">
+      <select id="ga-client" class="finput" style="width:180px;cursor:pointer">
+        <option value="">All clients</option>
+        ${clients.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}
+      </select>
+      <input id="ga-etype" type="text" class="finput" placeholder="Event type filter…" style="width:160px">
+      <input id="ga-user" type="text" class="finput" placeholder="Username filter…" style="width:140px">
+      <button class="btn sm primary" onclick="_gaOffset=0;loadGlobalAudit()">Search</button>
+      <button class="btn sm" onclick="document.getElementById('ga-client').value='';document.getElementById('ga-etype').value='';document.getElementById('ga-user').value='';_gaOffset=0;loadGlobalAudit()">Clear</button>
+    </div>
+    <div id="ga-table"><span class="spinner"></span></div>
+    <div id="ga-pagination" style="display:flex;gap:8px;margin-top:12px;align-items:center"></div>
+  `;
+  _gaOffset = 0;
+  loadGlobalAudit();
+}
+
+async function loadGlobalAudit() {
+  const tableEl = document.getElementById('ga-table');
+  const pagEl   = document.getElementById('ga-pagination');
+  if (!tableEl) return;
+  tableEl.innerHTML = '<span class="spinner"></span>';
+
+  const clientId = document.getElementById('ga-client')?.value || '';
+  const etype    = (document.getElementById('ga-etype')?.value || '').trim();
+  const uname    = (document.getElementById('ga-user')?.value  || '').trim();
+
+  const params = new URLSearchParams({ limit: _gaLimit, offset: _gaOffset });
+  if (clientId) params.set('client_id', clientId);
+  if (etype)    params.set('event_type', etype);
+  if (uname)    params.set('username',   uname);
+
+  try {
+    const r = await fetch(`${API}/audit?${params}`, {headers:{Authorization:'Bearer '+getToken()}});
+    if (!r.ok) { tableEl.innerHTML = '<div class="empty">Failed to load audit log</div>'; return; }
+    const data = await r.json();
+    const events = data.events || [];
+    const total  = data.total  || 0;
+
+    tableEl.innerHTML = `
+      <div style="font-size:8px;color:var(--muted);margin-bottom:8px">${total} total event${total!==1?'s':''} · showing ${_gaOffset+1}–${Math.min(_gaOffset+_gaLimit,total)}</div>
+      <table>
+        <thead><tr><th>Time</th><th>Client</th><th>Event</th><th>User</th><th>Method</th><th>Path</th><th>Status</th><th>Duration</th></tr></thead>
+        <tbody>${events.length ? events.map(e=>{
+          const clientName = clients.find(c=>c.id===e.client_id)?.name || (e.client_id ? e.client_id.slice(0,8) : '—');
+          return `<tr>
+            <td style="font-size:9px;color:var(--muted);white-space:nowrap">${(e.timestamp||'').slice(0,19).replace('T',' ')}</td>
+            <td style="font-size:8px;color:var(--muted)">${esc(clientName)}</td>
+            <td style="font-size:9px">${esc(e.event_type||'—')}</td>
+            <td style="font-size:9px;color:var(--muted)">${esc(e.username||'anon')}</td>
+            <td><span style="font-size:8px;color:${e.method==='GET'?'var(--blue)':e.method==='POST'?'var(--green)':e.method==='DELETE'?'var(--red)':'var(--muted)'}">${esc(e.method||'—')}</span></td>
+            <td style="font-size:9px;color:var(--muted);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.path||'')}">${esc((e.path||'').slice(0,60))}</td>
+            <td><span style="font-size:9px;color:${(e.status_code||0)<400?'var(--green)':(e.status_code||0)<500?'var(--amber)':'var(--red)'}">${e.status_code||'—'}</span></td>
+            <td style="font-size:9px;color:var(--muted)">${e.duration_ms!=null?e.duration_ms.toFixed(0)+'ms':'—'}</td>
+          </tr>`;
+        }).join('') : '<tr><td colspan="8" class="empty">No events match your filters</td></tr>'}
+        </tbody>
+      </table>
+    `;
+
+    if (pagEl) {
+      const hasPrev = _gaOffset > 0;
+      const hasNext = _gaOffset + _gaLimit < total;
+      pagEl.innerHTML = `
+        ${hasPrev ? `<button class="btn sm" onclick="_gaOffset=Math.max(0,_gaOffset-${_gaLimit});loadGlobalAudit()">&#8592; Prev</button>` : ''}
+        <span style="font-size:8px;color:var(--muted)">Page ${Math.floor(_gaOffset/_gaLimit)+1} / ${Math.max(1,Math.ceil(total/_gaLimit))}</span>
+        ${hasNext ? `<button class="btn sm" onclick="_gaOffset=_gaOffset+${_gaLimit};loadGlobalAudit()">Next &#8594;</button>` : ''}
+      `;
+    }
+  } catch(e) { tableEl.innerHTML = '<div class="empty">Error loading audit log</div>'; }
+}
+
+(async () => { await loadClients(); loadSystemOverview(); })();
 </script>
 <script src="/nav-component.js"></script>
 </body>

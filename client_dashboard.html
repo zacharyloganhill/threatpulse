@@ -110,6 +110,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .toast.success{border-color:var(--teal);color:var(--teal)}
 .toast.error{border-color:var(--red);color:var(--red)}
 @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
 /* Notification dropdown */
 .notif-dropdown{position:absolute;top:44px;right:16px;width:360px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.5);z-index:200;display:none}
 .notif-dropdown.open{display:block}
@@ -130,6 +131,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
   <div id="exposureWidget" class="exposure-badge" title="Total estimated financial exposure" style="display:none">
     Risk: <span id="exposureTopbar">$0</span>
+  </div>
+  <div id="findingsWidget" style="display:none;font-size:9px;color:var(--muted);padding:3px 8px;border:1px solid var(--border);cursor:pointer" onclick="switchTab('findings')" title="Vulnerability scanner findings">
+    Findings: <span id="findingsTopbar" style="color:var(--amber);font-weight:600">0</span>
   </div>
   <div style="position:relative">
     <button class="notif-btn" onclick="toggleNotif()" id="notifBtn">
@@ -189,6 +193,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <button class="tab-btn" onclick="switchTab('tabletop')">Tabletop</button>
       <button class="tab-btn" onclick="switchTab('supplychain')">Supply Chain</button>
       <button class="tab-btn" onclick="switchTab('riskportfolio')">Risk Portfolio</button>
+      <button class="tab-btn" onclick="switchTab('compliance')">Compliance</button>
+      <button class="tab-btn" onclick="switchTab('findings')">Scan Findings</button>
     </div>
 
     <!-- FEED TAB -->
@@ -235,8 +241,38 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
     <!-- REMEDIATION TAB -->
     <div class="tab-pane" id="tab-remediation">
-      <div class="section-header">Open Remediations</div>
+      <div id="rem-metrics-row" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px"></div>
+      <div class="section-header" style="display:flex;justify-content:space-between;align-items:center">
+        <span>Open Remediations</span>
+        <button class="btn btn-primary" onclick="showCreateRemModal()">+ Track Item</button>
+      </div>
       <div id="remItems" class="item-list"></div>
+    </div>
+
+    <!-- Create Remediation Modal -->
+    <div id="create-rem-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center">
+      <div style="background:#0c0f14;border:1px solid rgba(255,255,255,.12);width:440px;max-width:95vw;padding:24px;border-radius:2px">
+        <div style="font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--teal);margin-bottom:16px">TRACK FOR REMEDIATION</div>
+        <div id="cr-item-preview" style="background:#161c28;border:1px solid rgba(255,255,255,.07);padding:10px 12px;margin-bottom:16px;font-size:9px"></div>
+        <input type="hidden" id="cr-item-id">
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:4px">PRIORITY</div>
+            <select id="cr-priority" style="width:100%;background:#161c28;border:1px solid rgba(255,255,255,.07);color:#c9d4e3;font-family:var(--mono);font-size:9px;padding:6px 8px;outline:none;cursor:pointer">
+              <option value="0">Normal</option>
+              <option value="1">High Priority</option>
+              <option value="2">Critical / Emergency</option>
+            </select>
+          </div>
+          <div style="font-size:8px;color:var(--muted);line-height:1.7">
+            SLA due date will be assigned automatically based on item severity and client profile.
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+          <button class="btn" onclick="closeCreateRemModal()">Cancel</button>
+          <button class="btn btn-primary" id="cr-submit-btn" onclick="submitCreateRem()">Add to Tracker</button>
+        </div>
+      </div>
     </div>
 
     <!-- DARK WEB TAB -->
@@ -255,9 +291,70 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="tab-pane" id="tab-tabletop">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
         <h3 style="font-size:13px;font-weight:600">Tabletop Exercises</h3>
-        <button class="btn btn-primary" onclick="generateTabletop()">Generate Scenario</button>
+        <button class="btn btn-primary" onclick="openTabletopModal()">+ Generate Scenario</button>
       </div>
       <div id="tabletopList" class="item-list"></div>
+    </div>
+
+    <!-- Tabletop Generate Modal -->
+    <div id="tabletop-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;display:none;align-items:center;justify-content:center">
+      <div style="background:#0c0f14;border:1px solid rgba(255,255,255,.12);width:480px;max-width:95vw;padding:24px">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:2px;color:#00d4aa;margin-bottom:16px">GENERATE TABLETOP SCENARIO</div>
+        <div style="font-size:9px;color:#4e5d72;margin-bottom:12px">Select a scenario type and optional custom focus area</div>
+        <div style="margin-bottom:12px">
+          <div style="font-size:8px;letter-spacing:1px;color:#4e5d72;margin-bottom:6px">SCENARIO TYPE</div>
+          <div id="tt-type-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px"></div>
+        </div>
+        <div style="margin-bottom:16px">
+          <div style="font-size:8px;letter-spacing:1px;color:#4e5d72;margin-bottom:4px">CUSTOM FOCUS (OPTIONAL)</div>
+          <input type="text" id="tt-custom" placeholder="e.g. focus on cloud infrastructure, 3rd-party access..." style="width:100%;background:#111620;border:1px solid rgba(255,255,255,.07);color:#c9d4e3;font-family:'JetBrains Mono',monospace;font-size:9px;padding:7px 10px;outline:none">
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button onclick="closeTabletopModal()" style="font-family:'JetBrains Mono',monospace;font-size:9px;padding:6px 14px;background:transparent;border:1px solid rgba(255,255,255,.07);color:#4e5d72;cursor:pointer">CANCEL</button>
+          <button id="tt-generate-btn" onclick="submitTabletop()" style="font-family:'JetBrains Mono',monospace;font-size:9px;padding:6px 14px;background:transparent;border:1px solid #00d4aa;color:#00d4aa;cursor:pointer">GENERATE</button>
+        </div>
+        <div id="tt-gen-status" style="display:none;font-size:9px;color:#4e5d72;margin-top:10px;text-align:center"></div>
+      </div>
+    </div>
+
+    <!-- Add Vendor Modal -->
+    <div id="vendor-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;width:420px;max-width:95vw;padding:24px">
+        <div style="font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--teal);margin-bottom:16px">ADD VENDOR</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:4px">VENDOR NAME *</div>
+            <input id="vnd-name" type="text" placeholder="e.g. Microsoft, CrowdStrike" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-size:12px;padding:7px 10px;border-radius:4px;outline:none">
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:4px">PRODUCTS (comma-separated)</div>
+            <input id="vnd-products" type="text" placeholder="e.g. Windows, Exchange, Defender" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-size:12px;padding:7px 10px;border-radius:4px;outline:none">
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:4px">CRITICALITY</div>
+            <select id="vnd-criticality" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-size:12px;padding:7px 10px;border-radius:4px;outline:none">
+              <option value="low">Low</option>
+              <option value="medium" selected>Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:4px">VENDOR TYPE</div>
+            <select id="vnd-type" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-size:12px;padding:7px 10px;border-radius:4px;outline:none">
+              <option value="software">Software</option>
+              <option value="cloud">Cloud</option>
+              <option value="hardware">Hardware</option>
+              <option value="service">Service / MSP</option>
+              <option value="network">Network / Telecom</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+          <button class="btn" onclick="closeVendorModal()">Cancel</button>
+          <button class="btn btn-primary" id="vnd-submit-btn" onclick="submitVendor()">Add Vendor</button>
+        </div>
+      </div>
     </div>
 
     <!-- SUPPLY CHAIN TAB -->
@@ -265,7 +362,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
         <h3 style="font-size:13px;font-weight:600">Vendor Risk Graph</h3>
         <button class="btn" onclick="addVendorForm()">Add Vendor</button>
-        <a id="scReportLink" href="#" class="btn" onclick="downloadScReport(event)">Export Report</a>
+        <a id="scReportLink" href="#" class="btn" onclick="event.preventDefault();window.open('supplychain.html?client_id='+clientId,'_self')">Full Graph View</a>
       </div>
       <div id="vendorGraph" class="graph-placeholder">
         <div style="font-size:20px">&#9681;</div>
@@ -305,6 +402,35 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
     </div>
 
+    <div class="tab-pane" id="tab-compliance">
+      <div class="section-header" style="display:flex;justify-content:space-between;align-items:center">
+        <span>FedRAMP 20x Compliance</span>
+        <button class="btn btn-primary" id="ksi-validate-btn" onclick="triggerKSIValidation()">▶ Run Validation</button>
+      </div>
+      <div id="ksi-summary-bar" style="display:flex;gap:8px;margin-bottom:16px"></div>
+      <div id="ksi-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px"></div>
+      <div class="section-header" style="margin-top:24px">OSCAL Document Exports</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px" id="oscal-btns"></div>
+    </div>
+
+    <!-- SCAN FINDINGS TAB -->
+    <div class="tab-pane" id="tab-findings">
+      <div class="section-header" style="display:flex;justify-content:space-between;align-items:center">
+        <span>Scanner Findings</span>
+        <button class="btn" onclick="loadScanFindings()">↻ Refresh</button>
+      </div>
+      <div id="findings-severity-bar" style="display:flex;gap:8px;margin-bottom:16px"></div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center">
+        <span style="font-size:9px;color:var(--muted)">Filter:</span>
+        <button class="btn sm" id="sf-all" onclick="filterFindings('')">All</button>
+        <button class="btn sm" id="sf-crit" onclick="filterFindings('CRITICAL')">Critical</button>
+        <button class="btn sm" id="sf-high" onclick="filterFindings('HIGH')">High</button>
+        <button class="btn sm" id="sf-med" onclick="filterFindings('MEDIUM')">Medium</button>
+        <button class="btn sm" id="sf-low" onclick="filterFindings('LOW')">Low</button>
+      </div>
+      <div id="findings-list" class="item-list"></div>
+    </div>
+
   </div><!-- .main -->
 </div><!-- .layout -->
 
@@ -314,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 const API = '/api/v1';
 const params = new URLSearchParams(location.search);
 const clientId = params.get('client_id') || '';
-let token = localStorage.getItem('pf_token') || '';
+let token = localStorage.getItem('token') || localStorage.getItem('pf_token') || '';
 let currentSevFilter = '';
 let currentCatFilter = '';
 let allItems = [];
@@ -325,6 +451,11 @@ if (!clientId) {
 
 function hdr() {
   return token ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+}
+
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 async function api(path, opts = {}) {
@@ -342,16 +473,20 @@ function toast(msg, type = 'info', dur = 3000) {
   setTimeout(() => d.remove(), dur);
 }
 
+let _activeTab = 'feed';
 function switchTab(name) {
+  _activeTab = name;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
   document.querySelector(`.tab-btn[onclick="switchTab('${name}')"]`).classList.add('active');
   document.getElementById('tab-' + name).classList.add('active');
-  if (name === 'darkweb') loadDarkwebAlerts();
-  if (name === 'tabletop') loadTabletops();
-  if (name === 'supplychain') loadSupplyChain();
-  if (name === 'riskportfolio') loadRiskPortfolio();
-  if (name === 'remediation') loadRemediations();
+  const loaders = { darkweb: ['dwAlerts', loadDarkwebAlerts], tabletop: ['tabletopList', loadTabletops], supplychain: ['vendorList', loadSupplyChain], riskportfolio: ['riskItemsList', loadRiskPortfolio], remediation: ['remItems', loadRemediations], compliance: ['ksi-grid', loadComplianceTab], findings: ['findings-list', loadScanFindings] };
+  if (loaders[name]) {
+    const [elId, fn] = loaders[name];
+    const el = document.getElementById(elId);
+    if (el && !el.innerHTML.trim()) el.innerHTML = '<div class="empty-state" style="padding:30px"><div style="display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin .7s linear infinite;margin-bottom:8px"></div><br>Loading...</div>';
+    fn();
+  }
 }
 
 function filterSev(sev) {
@@ -417,9 +552,9 @@ function renderItems(items) {
   const el = document.getElementById('feedItems');
   if (!filtered.length) { el.innerHTML = '<div class="empty-state">No items match current filters</div>'; return; }
   el.innerHTML = filtered.slice(0, 50).map(item => `
-    <div class="item-row" onclick="window.open('dashboard.html?item=${item.id}','_blank')">
-      <div class="sev-dot sev-${item.severity}"></div>
-      <div class="item-body">
+    <div class="item-row">
+      <div class="sev-dot sev-${item.severity}" onclick="window.open('dashboard.html?item=${item.id}','_blank')" style="cursor:pointer"></div>
+      <div class="item-body" onclick="window.open('dashboard.html?item=${item.id}','_blank')" style="cursor:pointer;flex:1">
         <div class="item-title">${item.title}</div>
         <div class="item-meta">${item.feed_label} &middot; ${timeAgo(item.published_at)}</div>
         <div class="item-badges">
@@ -428,7 +563,10 @@ function renderItems(items) {
           ${(item.cve_ids || []).slice(0, 2).map(c => `<span class="pill">${c}</span>`).join('')}
         </div>
       </div>
-      ${item.risk_score ? `<div style="font-family:var(--mono);font-size:9px;color:var(--muted)">${item.risk_score.toFixed(2)}</div>` : ''}
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
+        ${item.risk_score ? `<div style="font-family:var(--mono);font-size:9px;color:var(--muted)">${item.risk_score.toFixed(2)}</div>` : ''}
+        <button class="btn" style="font-size:7px;padding:2px 7px;white-space:nowrap" onclick="event.stopPropagation();trackItem('${item.id}','${esc(item.title).replace(/'/g,'')}','${item.severity||'HIGH'}')">+ Track</button>
+      </div>
     </div>
   `).join('');
 }
@@ -481,22 +619,111 @@ async function loadAssets() {
 
 async function loadRemediations() {
   if (!clientId) return;
-  const data = await api(`/clients/${clientId}/remediations`);
+  const [data, metrics] = await Promise.all([
+    api(`/clients/${clientId}/remediation`),
+    api(`/clients/${clientId}/metrics`),
+  ]);
+
+  const mRow = document.getElementById('rem-metrics-row');
+  if (mRow && metrics) {
+    const slaColor = (metrics.sla_compliance_rate||0) >= 0.8 ? 'var(--green)' : (metrics.sla_compliance_rate||0) >= 0.5 ? 'var(--amber)' : 'var(--red)';
+    mRow.innerHTML = `
+      <div class="stat-card stat-high"><div class="stat-label">Open Items</div><div class="stat-value">${metrics.open_count||0}</div></div>
+      <div class="stat-card stat-critical"><div class="stat-label">Overdue</div><div class="stat-value" style="color:${(metrics.overdue_count||0)>0?'var(--red)':'var(--green)'}">${metrics.overdue_count||0}</div></div>
+      <div class="stat-card stat-teal"><div class="stat-label">MTTR</div><div class="stat-value">${metrics.mttr_days!=null?metrics.mttr_days.toFixed(1)+'d':'—'}</div></div>
+      <div class="stat-card stat-teal"><div class="stat-label">SLA Compliance</div><div class="stat-value" style="color:${slaColor}">${metrics.sla_compliance_rate!=null?(metrics.sla_compliance_rate*100).toFixed(0)+'%':'—'}</div></div>
+    `;
+  }
+
   const el = document.getElementById('remItems');
-  if (!data || !data.length) { el.innerHTML = '<div class="empty-state">No open remediations</div>'; return; }
-  el.innerHTML = data.map(r => `
-    <div class="item-row">
-      <div class="sev-dot sev-${r.severity || 'MEDIUM'}"></div>
-      <div class="item-body">
-        <div class="item-title">${r.title || r.item_id}</div>
-        <div class="item-meta">Due: ${r.due_date || 'N/A'} &middot; Status: ${r.status} &middot; ${r.assigned_to || 'Unassigned'}</div>
-        <div class="item-badges">
-          <span class="pill ${r.is_overdue ? 'badge-red' : ''}">${r.is_overdue ? 'OVERDUE' : r.status}</span>
-          ${r.sla_days ? `<span class="pill">SLA: ${r.sla_days}d</span>` : ''}
+  const items = data?.items || data || [];
+  if (!items.length) { el.innerHTML = '<div class="empty-state">No open remediations</div>'; return; }
+  const statusColors = { open:'var(--amber)', in_progress:'var(--blue)', patched:'var(--teal)', accepted_risk:'var(--muted)', false_positive:'var(--muted)', wont_fix:'var(--muted)' };
+  el.innerHTML = items.map(r => `
+    <div class="item-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+      <div style="display:flex;align-items:flex-start;gap:12px;width:100%">
+        <div class="sev-dot sev-${r.severity || 'MEDIUM'}"></div>
+        <div class="item-body">
+          <div class="item-title">${esc(r.title || r.item_id)}</div>
+          <div class="item-meta">Due: ${r.due_date || 'N/A'} &middot; ${r.assigned_to || 'Unassigned'} ${r.days_remaining != null ? '&middot; ' + (r.days_remaining < 0 ? Math.abs(r.days_remaining) + 'd overdue' : r.days_remaining + 'd left') : ''}</div>
+          <div class="item-badges">
+            <span class="pill" style="color:${statusColors[r.status]||'var(--muted)'};border-color:${statusColors[r.status]||'var(--border)'}">${(r.status||'open').replace(/_/g,' ').toUpperCase()}</span>
+            ${r.is_overdue ? '<span class="pill badge-red">OVERDUE</span>' : ''}
+            ${r.sla_days ? `<span class="pill">SLA: ${r.sla_days}d</span>` : ''}
+          </div>
+        </div>
+        <div style="display:flex;gap:4px;margin-left:auto;flex-shrink:0">
+          <select class="btn" style="font-size:8px;padding:3px 6px;cursor:pointer" onchange="updateRemStatus('${r.id}', this.value)">
+            <option value="" disabled selected>Update status...</option>
+            <option value="in_progress">In Progress</option>
+            <option value="patched">Patched</option>
+            <option value="accepted_risk">Accept Risk</option>
+            <option value="false_positive">False Positive</option>
+            <option value="wont_fix">Won't Fix</option>
+          </select>
         </div>
       </div>
     </div>
   `).join('');
+}
+
+async function updateRemStatus(remId, status) {
+  if (!status) return;
+  const data = await api(`/clients/${clientId}/remediation/${remId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+  if (data) { toast(`Status updated: ${status.replace(/_/g,' ')}`, 'success'); loadRemediations(); }
+  else toast('Update failed', 'error');
+}
+
+function trackItem(itemId, title, severity) {
+  document.getElementById('cr-item-id').value = itemId;
+  document.getElementById('cr-priority').value = severity === 'CRITICAL' ? '2' : severity === 'HIGH' ? '1' : '0';
+  const sevColors = {CRITICAL:'var(--red)', HIGH:'var(--amber)', MEDIUM:'var(--blue)', LOW:'var(--green)'};
+  document.getElementById('cr-item-preview').innerHTML =
+    `<div style="font-weight:600;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title}</div>` +
+    `<span style="font-size:8px;color:${sevColors[severity]||'var(--muted)'};font-weight:700">${severity}</span>` +
+    `<span style="font-size:8px;color:var(--muted);margin-left:8px">ID: ${itemId.slice(0,12)}…</span>`;
+  const m = document.getElementById('create-rem-modal');
+  m.style.display = 'flex';
+}
+
+function showCreateRemModal() {
+  document.getElementById('cr-item-id').value = '';
+  document.getElementById('cr-priority').value = '0';
+  document.getElementById('cr-item-preview').innerHTML =
+    '<span style="color:var(--muted)">No item selected — enter Item ID manually below</span>' +
+    '<br><input id="cr-manual-id" type="text" style="width:100%;background:#0c0f14;border:1px solid rgba(255,255,255,.07);color:#c9d4e3;font-family:var(--mono);font-size:9px;padding:4px 6px;outline:none;margin-top:6px" placeholder="Paste threat item ID...">';
+  const m = document.getElementById('create-rem-modal');
+  m.style.display = 'flex';
+}
+
+function closeCreateRemModal() {
+  document.getElementById('create-rem-modal').style.display = 'none';
+}
+
+async function submitCreateRem() {
+  let itemId = document.getElementById('cr-item-id').value.trim();
+  if (!itemId) {
+    const manual = document.getElementById('cr-manual-id');
+    itemId = manual ? manual.value.trim() : '';
+  }
+  if (!itemId) { toast('Item ID is required', 'error'); return; }
+  const btn = document.getElementById('cr-submit-btn');
+  btn.disabled = true; btn.textContent = 'Adding…';
+  const data = await api(`/clients/${clientId}/remediation`, {
+    method: 'POST',
+    body: JSON.stringify({ item_id: itemId, priority: parseInt(document.getElementById('cr-priority').value) || 0 }),
+  });
+  btn.disabled = false; btn.textContent = 'Add to Tracker';
+  if (data && data.id) {
+    closeCreateRemModal();
+    toast('Added to remediation tracker', 'success');
+    loadRemediations();
+  } else {
+    toast('Failed to add — check that the Item ID exists', 'error');
+  }
 }
 
 // ── DARK WEB TAB ──────────────────────────────────────────────────────────────
@@ -570,24 +797,75 @@ async function loadTabletops() {
   `).join('');
 }
 
-async function generateTabletop() {
-  const types = ['ransomware', 'data_breach', 'supply_chain', 'insider_threat', 'ddos', 'phishing', 'zero_day', 'cloud_breach'];
-  const type = prompt('Scenario type:\n' + types.join(', '), 'ransomware');
-  if (!type) return;
-  const custom = prompt('Custom scenario details (optional — leave blank for default):', '') || '';
-  toast('Generating scenario with AI... this may take 30-60 seconds', 'info', 60000);
+let _ttSelectedType = '';
+
+async function openTabletopModal() {
+  const modal = document.getElementById('tabletop-modal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  document.getElementById('tt-custom').value = '';
+  document.getElementById('tt-gen-status').style.display = 'none';
+  const grid = document.getElementById('tt-type-grid');
+  grid.innerHTML = '<div style="font-size:9px;color:#4e5d72;grid-column:1/-1">Loading scenarios...</div>';
+  _ttSelectedType = '';
+  try {
+    const r = await fetch(`${API}/tabletop/scenario-types`, {headers: {Authorization: 'Bearer ' + token}});
+    const types = r.ok ? await r.json() : null;
+    if (types && Object.keys(types).length) {
+      grid.innerHTML = Object.entries(types).map(([key, val]) => `
+        <div class="tt-type-card" data-type="${key}" onclick="selectTTType('${key}')" style="border:1px solid rgba(255,255,255,.07);padding:8px 10px;cursor:pointer;transition:all .12s">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;color:#c9d4e3;margin-bottom:2px">${esc(val.title || key)}</div>
+          <div style="font-size:8px;color:#4e5d72">${(val.phases || []).length} phases</div>
+        </div>
+      `).join('');
+    } else {
+      const fallback = ['ransomware','data_breach','supply_chain','insider_threat','ddos','phishing','zero_day','cloud_breach'];
+      grid.innerHTML = fallback.map(key => `
+        <div class="tt-type-card" data-type="${key}" onclick="selectTTType('${key}')" style="border:1px solid rgba(255,255,255,.07);padding:8px 10px;cursor:pointer;transition:all .12s">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;color:#c9d4e3">${key.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</div>
+        </div>
+      `).join('');
+    }
+  } catch(e) { grid.innerHTML = '<div style="font-size:9px;color:#f0595a;grid-column:1/-1">Failed to load scenario types</div>'; }
+}
+
+function selectTTType(type) {
+  _ttSelectedType = type;
+  document.querySelectorAll('.tt-type-card').forEach(c => {
+    const isSelected = c.dataset.type === type;
+    c.style.borderColor = isSelected ? '#00d4aa' : 'rgba(255,255,255,.07)';
+    c.style.background = isSelected ? 'rgba(0,212,170,.07)' : '';
+  });
+}
+
+function closeTabletopModal() {
+  const modal = document.getElementById('tabletop-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function submitTabletop() {
+  if (!_ttSelectedType) { toast('Select a scenario type first', 'error'); return; }
+  const custom = document.getElementById('tt-custom').value.trim();
+  const btn = document.getElementById('tt-generate-btn');
+  const status = document.getElementById('tt-gen-status');
+  btn.disabled = true; btn.textContent = 'GENERATING...';
+  status.style.display = 'block'; status.textContent = 'AI generating scenario — this may take 30-60 seconds...';
   const data = await api(`/clients/${clientId}/tabletops/generate`, {
     method: 'POST',
-    body: JSON.stringify({ scenario_type: type, custom_prompt: custom }),
+    body: JSON.stringify({ scenario_type: _ttSelectedType, custom_prompt: custom }),
   });
-  document.querySelectorAll('.toast').forEach(t => t.remove());
+  btn.disabled = false; btn.textContent = 'GENERATE';
   if (data && data.id) {
+    closeTabletopModal();
     toast('Scenario generated!', 'success');
     loadTabletops();
   } else {
-    toast('Generation failed — check Ollama is running (or will use fallback)', 'error');
+    status.style.color = '#f0595a';
+    status.textContent = 'Generation failed — ensure AI backend is running';
   }
 }
+
+function generateTabletop() { openTabletopModal(); }
 
 // ── SUPPLY CHAIN TAB ──────────────────────────────────────────────────────────
 
@@ -617,21 +895,36 @@ async function loadSupplyChain() {
   `).join('');
 }
 
-async function addVendorForm() {
-  const name = prompt('Vendor name:');
-  if (!name) return;
-  const products = prompt('Products (comma-separated, e.g., Windows, Exchange):', '') || '';
-  const criticality = prompt('Criticality (low/medium/high):', 'medium');
+function addVendorForm() {
+  const modal = document.getElementById('vendor-modal');
+  modal.style.display = 'flex';
+  document.getElementById('vnd-name').value = '';
+  document.getElementById('vnd-products').value = '';
+  document.getElementById('vnd-criticality').value = 'medium';
+  document.getElementById('vnd-type').value = 'software';
+  setTimeout(() => document.getElementById('vnd-name').focus(), 50);
+}
+
+function closeVendorModal() {
+  document.getElementById('vendor-modal').style.display = 'none';
+}
+
+async function submitVendor() {
+  const name = document.getElementById('vnd-name').value.trim();
+  if (!name) { toast('Vendor name is required', 'error'); return; }
+  const btn = document.getElementById('vnd-submit-btn');
+  btn.disabled = true; btn.textContent = 'Adding...';
   const r = await api(`/clients/${clientId}/vendors`, {
     method: 'POST',
     body: JSON.stringify({
       vendor_name: name,
-      vendor_type: 'software',
-      criticality: criticality || 'medium',
-      products: products ? products.split(',').map(s => s.trim()).filter(Boolean) : [],
+      vendor_type: document.getElementById('vnd-type').value,
+      criticality: document.getElementById('vnd-criticality').value,
+      products: document.getElementById('vnd-products').value.split(',').map(s => s.trim()).filter(Boolean),
     }),
   });
-  if (r && r.id) { toast('Vendor added', 'success'); loadSupplyChain(); }
+  btn.disabled = false; btn.textContent = 'Add Vendor';
+  if (r && r.id) { closeVendorModal(); toast('Vendor added', 'success'); loadSupplyChain(); }
   else toast('Failed to add vendor', 'error');
 }
 
@@ -675,8 +968,205 @@ async function loadRiskPortfolio() {
   `).join('');
 }
 
-async function downloadRoiReport() {
-  window.open(`${API}/clients/${clientId}/roi-report.pdf?token=${token}`, '_blank');
+function downloadRoiReport() {
+  window.open(`${API}/clients/${clientId}/report/pdf?token=${token}`, '_blank');
+}
+
+// ── COMPLIANCE (KSI + OSCAL) ──────────────────────────────────────────────────
+const KSI_STATUS_COLOR = { pass: 'var(--green)', conditional: 'var(--amber)', fail: 'var(--red)', unknown: 'var(--muted)' };
+
+async function loadComplianceTab() {
+  if (!clientId) return;
+  const grid = document.getElementById('ksi-grid');
+  const bar = document.getElementById('ksi-summary-bar');
+  grid.innerHTML = '<div class="empty-state" style="padding:30px"><div style="display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin .7s linear infinite;margin-bottom:8px"></div><br>Loading KSI data…</div>';
+
+  const data = await api(`/clients/${clientId}/ksi`);
+  if (!data) { grid.innerHTML = '<div class="empty-state">Failed to load KSI results</div>'; return; }
+
+  const s = data.summary || {};
+  const authColor = s.authorization_status === 'authorized' ? 'var(--green)' : s.authorization_status === 'conditional' ? 'var(--amber)' : 'var(--red)';
+  bar.innerHTML = `
+    <div style="flex:1;background:var(--bg3);border:1px solid var(--border);border-left:3px solid ${authColor};padding:10px 14px">
+      <div style="font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:2px">AUTHORIZATION STATUS</div>
+      <div style="font-size:12px;font-weight:700;color:${authColor};text-transform:uppercase">${(s.authorization_status||'unknown').replace(/-/g,' ')}</div>
+    </div>
+    <div style="background:var(--bg3);border:1px solid var(--border);padding:10px 14px;text-align:center">
+      <div style="font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:2px">PASSING</div>
+      <div style="font-size:14px;font-weight:700;color:var(--green)">${s.passing||0}</div>
+    </div>
+    <div style="background:var(--bg3);border:1px solid var(--border);padding:10px 14px;text-align:center">
+      <div style="font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:2px">CONDITIONAL</div>
+      <div style="font-size:14px;font-weight:700;color:var(--amber)">${s.conditional||0}</div>
+    </div>
+    <div style="background:var(--bg3);border:1px solid var(--border);padding:10px 14px;text-align:center">
+      <div style="font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:2px">FAILING</div>
+      <div style="font-size:14px;font-weight:700;color:var(--red)">${s.failing||0}</div>
+    </div>
+    <div style="background:var(--bg3);border:1px solid var(--border);padding:10px 14px;text-align:center">
+      <div style="font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:2px">AVG SCORE</div>
+      <div style="font-size:14px;font-weight:700;color:var(--teal)">${s.avg_score!=null ? (s.avg_score*100).toFixed(0)+'%' : '—'}</div>
+    </div>
+  `;
+
+  const results = data.results || [];
+  if (!results.length) {
+    grid.innerHTML = '<div class="empty-state">No KSI results yet — run validation to generate baseline</div>';
+  } else {
+    grid.innerHTML = results.map(r => {
+      const col = KSI_STATUS_COLOR[r.status] || 'var(--muted)';
+      const pct = r.score != null ? Math.round(r.score * 100) : null;
+      return `
+        <div style="background:var(--bg3);border:1px solid var(--border);border-top:2px solid ${col};padding:14px;border-radius:2px">
+          <div style="font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:6px">${esc(r.ksi_id||'').toUpperCase()}</div>
+          <div style="font-size:10px;font-weight:600;margin-bottom:8px">${esc(r.label||r.ksi_id||'')}</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:9px;font-weight:700;color:${col};text-transform:uppercase">${r.status||'unknown'}</span>
+            ${pct!=null?`<span style="font-size:9px;color:var(--muted)">${pct}%</span>`:''}
+          </div>
+          ${pct!=null?`<div style="height:3px;background:var(--bg4);border-radius:2px"><div style="width:${pct}%;height:100%;background:${col};border-radius:2px;transition:width .4s"></div></div>`:''}
+          ${r.details?`<div style="font-size:8px;color:var(--muted);margin-top:8px;line-height:1.5">${esc(r.details).slice(0,140)}${r.details.length>140?'…':''}</div>`:''}
+          ${r.checked_at?`<div style="font-size:7px;color:var(--muted);margin-top:6px">Checked ${timeAgo(r.checked_at)}</div>`:''}
+          <div style="margin-top:8px;display:flex;justify-content:flex-end">
+            <button class="btn" style="font-size:7px;padding:2px 7px" onclick="toggleKSIHistory('${esc(r.ksi_id||'')}',this)">History</button>
+          </div>
+          <div id="ksi-hist-${esc(r.ksi_id||'')}" style="display:none;margin-top:8px;max-height:120px;overflow-y:auto"></div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  const oscalSummary = await api(`/clients/${clientId}/oscal/summary`);
+  const oscalBtns = document.getElementById('oscal-btns');
+  if (oscalSummary?.documents) {
+    oscalBtns.innerHTML = [
+      ...oscalSummary.documents.map(d => `
+        <button class="btn" onclick="window.open('${API}/clients/${clientId}/oscal/${d.type}.${d.format}?token=${token}','_blank')" title="${d.count} items">
+          ⬇ ${d.label}
+          <span style="font-size:8px;color:var(--muted);margin-left:4px">${d.format.toUpperCase()}</span>
+          ${d.count ? `<span style="font-size:7px;color:var(--teal);margin-left:4px">${d.count}</span>` : ''}
+        </button>`),
+      `<button class="btn btn-primary" onclick="window.open('${API}/clients/${clientId}/oscal/bundle.zip?token=${token}','_blank')">⬇ Bundle ZIP</button>`
+    ].join('');
+  } else {
+    oscalBtns.innerHTML = ['poam.xml','sar.xml','vdr.json','oar.json','ssp.xml'].map(p =>
+      `<button class="btn" onclick="window.open('${API}/clients/${clientId}/oscal/${p}?token=${token}','_blank')">⬇ ${p.split('.')[0].toUpperCase()}</button>`
+    ).join('') + `<button class="btn btn-primary" onclick="window.open('${API}/clients/${clientId}/oscal/bundle.zip?token=${token}','_blank')">⬇ Bundle ZIP</button>`;
+  }
+}
+
+async function triggerKSIValidation() {
+  const btn = document.getElementById('ksi-validate-btn');
+  btn.disabled = true; btn.textContent = 'Running…';
+  const data = await api(`/clients/${clientId}/ksi/validate`, { method: 'POST' });
+  btn.disabled = false; btn.textContent = '▶ Run Validation';
+  if (data) {
+    toast('KSI validation triggered — results will update in ~30s', 'success');
+    setTimeout(loadComplianceTab, 8000);
+  } else {
+    toast('Validation trigger failed', 'error');
+  }
+}
+
+async function toggleKSIHistory(ksiId, btn) {
+  const panel = document.getElementById('ksi-hist-' + ksiId);
+  if (!panel) return;
+  if (panel.style.display !== 'none') { panel.style.display = 'none'; btn.textContent = 'History'; return; }
+  panel.style.display = 'block';
+  btn.textContent = 'Hide';
+  panel.innerHTML = '<div style="font-size:8px;color:var(--muted)">Loading…</div>';
+  const data = await api(`/clients/${clientId}/ksi/${encodeURIComponent(ksiId)}/history?limit=10`);
+  if (!data || !data.history?.length) { panel.innerHTML = '<div style="font-size:8px;color:var(--muted)">No history yet</div>'; return; }
+  const col = {pass:'var(--green)', conditional:'var(--amber)', fail:'var(--red)'};
+  panel.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:8px">
+    ${data.history.map(h => `<tr style="border-bottom:1px solid rgba(255,255,255,.04)">
+      <td style="padding:3px 4px;color:${col[h.status]||'var(--muted)'};font-weight:600">${(h.status||'').toUpperCase()}</td>
+      <td style="padding:3px 4px;color:var(--muted)">${h.score!=null?(h.score*100).toFixed(0)+'%':'—'}</td>
+      <td style="padding:3px 4px;color:var(--muted)">${(h.checked_at||'').slice(0,10)}</td>
+    </tr>`).join('')}
+  </table>`;
+}
+
+// ── SCAN FINDINGS ─────────────────────────────────────────────────────────────
+let _allFindings = [];
+let _findingsSevFilter = '';
+
+async function loadScanFindings() {
+  if (!clientId) return;
+  const list = document.getElementById('findings-list');
+  const bar = document.getElementById('findings-severity-bar');
+  list.innerHTML = '<div class="empty-state" style="padding:30px"><div style="display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin .7s linear infinite;margin-bottom:8px"></div><br>Loading findings…</div>';
+
+  const data = await api(`/clients/${clientId}/scan-findings?limit=500`);
+  if (!data) { list.innerHTML = '<div class="empty-state">Failed to load findings</div>'; return; }
+
+  _allFindings = data.findings || [];
+  const counts = data.counts || {};
+
+  const sevOrder = ['CRITICAL','HIGH','MEDIUM','LOW','INFO'];
+  const sevColors = {CRITICAL:'var(--red)', HIGH:'var(--amber)', MEDIUM:'var(--blue)', LOW:'var(--green)', INFO:'var(--muted)'};
+  bar.innerHTML = sevOrder.filter(s=>counts[s]).map(s =>
+    `<div style="background:var(--bg3);border:1px solid var(--border);border-top:2px solid ${sevColors[s]};padding:8px 14px;text-align:center;min-width:80px">
+      <div style="font-size:8px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">${s}</div>
+      <div style="font-size:16px;font-weight:700;color:${sevColors[s]}">${counts[s]}</div>
+    </div>`
+  ).join('') || '';
+
+  _findingsSevFilter = '';
+  renderFindings();
+}
+
+function filterFindings(sev) {
+  _findingsSevFilter = sev;
+  ['all','crit','high','med','low'].forEach(k => document.getElementById('sf-'+k)?.classList.remove('active'));
+  const map = {'':'all', CRITICAL:'crit', HIGH:'high', MEDIUM:'med', LOW:'low'};
+  document.getElementById('sf-'+(map[sev]||'all'))?.classList.add('active');
+  renderFindings();
+}
+
+function renderFindings() {
+  const list = document.getElementById('findings-list');
+  const items = _findingsSevFilter
+    ? _allFindings.filter(f => f.severity === _findingsSevFilter)
+    : _allFindings;
+
+  if (!items.length) {
+    list.innerHTML = '<div class="empty-state">No findings' + (_findingsSevFilter ? ' at ' + _findingsSevFilter + ' severity' : '') + '</div>';
+    return;
+  }
+
+  const sevColors = {CRITICAL:'var(--red)', HIGH:'var(--amber)', MEDIUM:'var(--blue)', LOW:'var(--green)', INFO:'var(--muted)'};
+  list.innerHTML = items.slice(0, 300).map(f => {
+    const col = sevColors[f.severity] || 'var(--muted)';
+    const title = f.title || f.plugin_name || f.vuln_id || 'Unknown Finding';
+    return `
+      <div class="item-row" style="flex-direction:column;align-items:stretch;gap:0">
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          <div class="sev-dot" style="background:${col};flex-shrink:0;margin-top:3px"></div>
+          <div class="item-body" style="flex:1">
+            <div class="item-title">${esc(title)}</div>
+            <div class="item-meta">
+              ${esc(f.hostname || f.ip_address || '')}
+              ${f.cvss != null ? ' &middot; CVSS ' + f.cvss : ''}
+              ${f.cve_id ? ' &middot; ' + esc(f.cve_id) : ''}
+              ${f.scanner_type ? ' &middot; via ' + esc(f.scanner_type) : ''}
+            </div>
+            <div class="item-badges">
+              <span class="pill" style="color:${col};border-color:${col}">${f.severity || 'UNKNOWN'}</span>
+              ${f.plugin_id ? `<span class="pill">Plugin ${esc(f.plugin_id)}</span>` : ''}
+            </div>
+          </div>
+          <div style="flex-shrink:0">
+            ${f.threat_item_id ? `<button class="btn" style="font-size:7px;padding:2px 7px" onclick="trackItem('${esc(f.threat_item_id)}','${esc(title).replace(/'/g,'')}','${f.severity||'MEDIUM'}')">+ Track</button>` : ''}
+          </div>
+        </div>
+        ${f.solution ? `<div style="font-size:8px;color:var(--muted);margin-top:6px;margin-left:24px;line-height:1.5">${esc(f.solution).slice(0,200)}${f.solution.length>200?'…':''}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  if (items.length > 300) {
+    list.innerHTML += `<div class="empty-state" style="padding:12px;font-size:9px">Showing 300 of ${items.length} findings — use severity filter to narrow results</div>`;
+  }
 }
 
 // ── NOTIFICATIONS ─────────────────────────────────────────────────────────────
@@ -705,6 +1195,15 @@ document.addEventListener('click', e => {
   if (!e.target.closest('.notif-btn') && !e.target.closest('.notif-dropdown')) {
     document.getElementById('notifDropdown').classList.remove('open');
   }
+  const ttModal = document.getElementById('tabletop-modal');
+  if (ttModal && e.target === ttModal) closeTabletopModal();
+  const vndModal = document.getElementById('vendor-modal');
+  if (vndModal && e.target === vndModal) closeVendorModal();
+  const crModal = document.getElementById('create-rem-modal');
+  if (crModal && e.target === crModal) closeCreateRemModal();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeTabletopModal(); closeVendorModal(); closeCreateRemModal(); }
 });
 
 // ── NAV HELPERS ───────────────────────────────────────────────────────────────
@@ -730,6 +1229,18 @@ async function loadClientName() {
   }
 }
 
+async function loadSecuritySummary() {
+  if (!clientId) return;
+  const data = await api(`/clients/${clientId}/security-summary`);
+  if (!data) return;
+  const total = data.scan_findings?.total || 0;
+  if (total > 0) {
+    const widget = document.getElementById('findingsWidget');
+    document.getElementById('findingsTopbar').textContent = total.toLocaleString();
+    if (widget) widget.style.display = '';
+  }
+}
+
 // ── INIT ─────────────────────────────────────────────────────────────────────
 
 async function init() {
@@ -738,10 +1249,17 @@ async function init() {
     return;
   }
   await loadClientName();
-  await Promise.all([loadFeed(), loadAssets(), loadPosture(), loadNotifications()]);
+  await Promise.all([loadFeed(), loadAssets(), loadPosture(), loadNotifications(), loadSecuritySummary()]);
 }
 
 init();
+
+setInterval(() => {
+  if (_activeTab === 'feed') loadFeed();
+  else if (_activeTab === 'darkweb') loadDarkwebAlerts();
+  else if (_activeTab === 'remediation') loadRemediations();
+  else if (_activeTab === 'findings') loadScanFindings();
+}, 60000);
 </script>
 <script src="/nav-component.js"></script>
 </body>

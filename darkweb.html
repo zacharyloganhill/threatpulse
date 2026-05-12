@@ -191,6 +191,7 @@ select:focus{border-color:var(--teal)}
     <div class="feed-hdr">
       <span class="feed-count" id="feedCount">Select a client to view alerts</span>
       <span class="feed-unack" id="feedUnack" style="display:none"></span>
+      <button class="btn sm" id="ackAllBtn" style="display:none;margin-left:auto" onclick="ackAll()">ACK ALL</button>
     </div>
     <div class="feed" id="feed" style="flex:1;overflow-y:auto"></div>
   </div>
@@ -295,11 +296,14 @@ function updateStats() {
   });
 
   const unackEl = document.getElementById('feedUnack');
+  const ackAllBtn = document.getElementById('ackAllBtn');
   if (unack > 0) {
     unackEl.style.display = '';
     unackEl.textContent = unack + ' UNACK';
+    if (ackAllBtn) ackAllBtn.style.display = '';
   } else {
     unackEl.style.display = 'none';
+    if (ackAllBtn) ackAllBtn.style.display = 'none';
   }
 }
 
@@ -407,6 +411,27 @@ async function ackAlert(id) {
   } catch(e) { showToast('Failed to acknowledge', true); }
 }
 
+async function ackAll() {
+  if (!selectedClient) return;
+  const unacked = alerts.filter(a => !a.is_acknowledged);
+  if (!unacked.length) return;
+  const btn = document.getElementById('ackAllBtn');
+  btn.disabled = true; btn.textContent = 'ACKING...';
+  try {
+    await Promise.all(unacked.map(a =>
+      fetch(`${API}/clients/${selectedClient.id}/darkweb-alerts/${a.id}/acknowledge`, {method:'POST', headers: hdr()})
+    ));
+    unacked.forEach(a => a.is_acknowledged = 1);
+    updateStats();
+    renderFeed(filtered());
+    showToast(`Acknowledged ${unacked.length} alert${unacked.length !== 1 ? 's' : ''}`);
+  } catch(e) {
+    showToast('Failed to acknowledge all', true);
+  } finally {
+    btn.disabled = false; btn.textContent = 'ACK ALL';
+  }
+}
+
 async function triggerScan() {
   if (!selectedClient) return;
   const btn = document.getElementById('scanBtn');
@@ -452,6 +477,7 @@ function showToast(msg, err = false) {
 }
 
 init();
+setInterval(() => { if (selectedClient) loadAlerts(); }, 60000);
 </script>
 <script src="/nav-component.js"></script>
 </body>

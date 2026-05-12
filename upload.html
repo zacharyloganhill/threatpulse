@@ -226,6 +226,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <button class="tab" onclick="switchTab('export')">Export &amp; Reports</button>
     <button class="tab" onclick="switchTab('ioc')">IOC Lookup</button>
     <button class="tab" onclick="switchTab('history')">Import History</button>
+    <button class="tab" onclick="switchTab('taxii')">TAXII Sources</button>
   </div>
 
   <!-- ================================================================ UPLOAD TAB -->
@@ -311,6 +312,23 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <input type="file" id="fi-iocs" class="dz-input" accept=".txt,.csv,.json" onchange="handleFile(this,'iocs')">
           <div class="progress-bar" id="pb-iocs"><div class="progress-fill" id="pf-iocs"></div></div>
         </div>
+      </div>
+
+      <!-- STIX Bundle Import -->
+      <div class="upload-card" id="card-stix">
+        <div class="card-title">🔗 STIX 2.1 Bundle</div>
+        <div class="card-desc">Import a STIX 2.1 JSON bundle. Indicators, malware, threat actors, and campaigns are converted to threat items automatically.</div>
+        <div class="format-pills">
+          <span class="pill">JSON</span>
+          <span class="pill" style="color:var(--teal)">STIX 2.1</span>
+        </div>
+        <div class="dropzone" id="dz-stix" ondragover="dzOver(event,'stix')" ondragleave="dzLeave('stix')" ondrop="dzDrop(event,'stix')">
+          <div class="dz-icon">📦</div>
+          <div class="dz-text">Drag & drop or <span onclick="document.getElementById('fi-stix').click()">browse</span></div>
+          <input type="file" id="fi-stix" class="dz-input" accept=".json" onchange="handleSTIX(this.files[0])">
+          <div class="progress-bar" id="pb-stix"><div class="progress-fill" id="pf-stix"></div></div>
+        </div>
+        <div id="stix-result" style="display:none;margin-top:8px;font-size:9px;padding:8px;background:var(--bg3);border:1px solid var(--border)"></div>
       </div>
 
       <!-- Bulk Client Import -->
@@ -591,6 +609,11 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
     </div>
 
+    <div style="margin-top:20px">
+      <div class="section-header">Recent IOC Lookups</div>
+      <div id="ioc-cache-list" style="color:var(--muted);font-size:9px;text-align:center;padding:20px">Loading...</div>
+    </div>
+
   </div><!-- /tab-ioc -->
 
   <!-- ================================================================ HISTORY TAB -->
@@ -626,6 +649,21 @@ tr:hover td{background:rgba(255,255,255,.02)}
     </div>
   </div><!-- /tab-history -->
 
+  <!-- ================================================================ TAXII TAB -->
+  <div id="tab-taxii" class="tab-pane">
+    <div class="section-header" style="display:flex;justify-content:space-between;align-items:center">
+      <span>TAXII 2.x Feed Sources</span>
+      <button class="btn sm" onclick="loadTaxiiSources()">↻ Refresh</button>
+    </div>
+    <div style="font-size:9px;color:var(--muted);margin-bottom:16px;line-height:1.7">
+      TAXII (Trusted Automated eXchange of Indicator Information) is a transport protocol for STIX-formatted threat intelligence.
+      These sources are configured server-side in <code style="font-family:var(--mono);font-size:8px;color:var(--teal)">config.py</code> and are polled automatically.
+    </div>
+    <div id="taxii-table-wrap">
+      <div style="text-align:center;padding:30px;color:var(--muted);font-size:9px">Loading TAXII sources...</div>
+    </div>
+  </div><!-- /tab-taxii -->
+
 </div><!-- /content -->
 
 <!-- Statusbar -->
@@ -641,7 +679,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 <div class="toast-container" id="toast-container"></div>
 
 <script>
-const API = 'http://localhost:8000/api/v1';
+const API = '/api/v1';
 let currentUploadId = null;
 let currentUploadType = null;
 let currentPreviewData = null;
@@ -649,11 +687,13 @@ let histStatusFilter = '';
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 function switchTab(name) {
-  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['upload','export','ioc','history'][i] === name));
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['upload','export','ioc','history','taxii'][i] === name));
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
   if (name === 'history') loadHistory();
+  if (name === 'taxii') loadTaxiiSources();
   if (name === 'export') loadExportClients();
+  if (name === 'ioc') loadIOCCache();
 }
 
 // ── Wizard helpers ────────────────────────────────────────────────────────────
@@ -731,7 +771,7 @@ async function loadExportClients() {
 }
 
 function getToken() {
-  return localStorage.getItem('pf_token') || '';
+  return localStorage.getItem('token') || localStorage.getItem('pf_token') || '';
 }
 
 // ── Drag & Drop ───────────────────────────────────────────────────────────────
@@ -747,7 +787,37 @@ function dzDrop(e, id) {
   dzLeave(id);
   const file = e.dataTransfer.files[0];
   if (!file) return;
+  if (id === 'stix') { handleSTIX(file); return; }
   uploadFile(file, id);
+}
+
+async function handleSTIX(file) {
+  if (!file) return;
+  const pb = document.getElementById('pb-stix');
+  const pf = document.getElementById('pf-stix');
+  const res = document.getElementById('stix-result');
+  pb.style.display = 'block'; pf.style.width = '30%';
+  res.style.display = 'none';
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    pf.style.width = '70%';
+    const r = await fetch(`${API}/upload/stix`, {method:'POST', headers:{'Authorization':'Bearer '+getToken()}, body:fd});
+    pf.style.width = '100%';
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'STIX import failed');
+    const counts = d.counts || {};
+    const countStr = Object.entries(counts).map(([k,v])=>`${v} ${k}`).join(' · ') || '';
+    res.style.display = '';
+    res.innerHTML = `<span style="color:var(--green);font-weight:700">✓ Imported ${d.imported} of ${d.total} objects</span>${countStr?'<br><span style="color:var(--muted)">'+countStr+'</span>':''}`;
+    toast(`STIX bundle imported: ${d.imported} objects`, 'success');
+  } catch(e) {
+    res.style.display = '';
+    res.innerHTML = `<span style="color:var(--red)">✗ ${e.message}</span>`;
+    toast('STIX import error: ' + e.message, 'error');
+  } finally {
+    setTimeout(() => { pb.style.display = 'none'; pf.style.width = '0'; }, 1200);
+  }
 }
 function handleFile(input, type) {
   const file = input.files[0];
@@ -774,12 +844,13 @@ async function uploadFile(file, type) {
     clients: `${API}/upload/clients`,
     'bulk-ioc': `${API}/upload/iocs`,
   };
+  // STIX has its own handler — shouldn't reach here
 
   const url = endpoints[type] || `${API}/upload/scan`;
 
   try {
     if (pf) { pf.style.width='40%'; }
-    const r = await fetch(url, {method:'POST', body:fd});
+    const r = await fetch(url, {method:'POST', headers:{'Authorization':'Bearer '+getToken()}, body:fd});
     if (pf) { pf.style.width='100%'; }
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || 'Upload failed');
@@ -897,7 +968,7 @@ async function confirmUpload() {
   try {
     const r = await fetch(url, {
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+getToken()},
       body: JSON.stringify({field_mapping: Object.keys(fieldMapping).length ? fieldMapping : undefined}),
     });
     const data = await r.json();
@@ -994,7 +1065,7 @@ async function pushToGitHub() {
   if (!clientId) { toast('Please select a client', 'error'); return; }
   toast('Pushing to GitHub...', 'info', 0);
   try {
-    const r = await fetch(`${API}/clients/${clientId}/export/push-rules-github`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    const r = await fetch(`${API}/clients/${clientId}/export/push-rules-github`, {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+getToken()}, body:JSON.stringify(body)});
     const data = await r.json();
     document.querySelector('.toast').remove();
     if (r.ok) toast(`Pushed ${data.pushed} files to GitHub`, 'success');
@@ -1015,7 +1086,7 @@ async function lookupIOC() {
   ['src-abuse','src-vt','src-gn'].forEach(id => document.getElementById(id).innerHTML='<span class="spinner"></span>');
 
   try {
-    const r = await fetch(`${API}/ioc/lookup?value=${encodeURIComponent(val)}`);
+    const r = await fetch(`${API}/ioc/lookup?value=${encodeURIComponent(val)}`, {headers:{'Authorization':'Bearer '+getToken()}});
     const data = await r.json();
 
     // Type badge
@@ -1059,6 +1130,7 @@ async function lookupIOC() {
     document.getElementById('src-gn-sub').textContent = data.greynoise_name||'';
 
     window._lastIOCData = data;
+    setTimeout(loadIOCCache, 500);
   } catch(e) {
     toast('Lookup error: '+e.message, 'error');
   }
@@ -1067,6 +1139,40 @@ async function lookupIOC() {
 function copyIOC() {
   const val = document.getElementById('ioc-val').value.trim();
   navigator.clipboard.writeText(val).then(()=>toast('Copied to clipboard','success'));
+}
+
+async function loadIOCCache() {
+  const el = document.getElementById('ioc-cache-list');
+  if (!el) return;
+  try {
+    const r = await fetch(`${API}/ioc/cache?limit=20`, {headers:{'Authorization':'Bearer '+getToken()}});
+    if (!r.ok) { el.textContent = 'Unavailable'; return; }
+    const d = await r.json();
+    const entries = d.entries || [];
+    if (!entries.length) { el.textContent = 'No cached lookups yet'; return; }
+    const verdictColor = v => ({malicious:'var(--red)', clean:'var(--green)', unknown:'var(--muted)'})[v] || 'var(--muted)';
+    el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:9px">
+      <thead><tr style="background:var(--bg4)">
+        <th style="padding:5px 8px;text-align:left;color:var(--muted);font-weight:500">IOC</th>
+        <th style="padding:5px 8px;text-align:left;color:var(--muted);font-weight:500">Type</th>
+        <th style="padding:5px 8px;text-align:left;color:var(--muted);font-weight:500">Verdict</th>
+        <th style="padding:5px 8px;text-align:left;color:var(--muted);font-weight:500">Cached</th>
+        <th style="padding:5px 8px;text-align:left;color:var(--muted);font-weight:500"></th>
+      </tr></thead>
+      <tbody>${entries.map(e => {
+        const isMal = (e.abuseipdb_score||0)>50||(e.vt_malicious||0)>5||e.greynoise_classification==='malicious';
+        const verdict = isMal ? 'malicious' : 'clean';
+        const ts = (e.cached_at||'').slice(0,16).replace('T',' ');
+        return `<tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:5px 8px;font-family:var(--mono)">${e.value||''}</td>
+          <td style="padding:5px 8px;color:var(--muted)">${e.ioc_type||''}</td>
+          <td style="padding:5px 8px;color:${verdictColor(verdict)};font-weight:600">${verdict.toUpperCase()}</td>
+          <td style="padding:5px 8px;color:var(--muted)">${ts}</td>
+          <td style="padding:5px 8px"><button class="btn" style="font-size:7px;padding:2px 6px" onclick="document.getElementById('ioc-val').value='${e.value||''}';lookupIOC()">Lookup</button></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+  } catch(e) { el.textContent = 'Failed to load'; }
 }
 
 function exportIOCReport() {
@@ -1079,13 +1185,77 @@ function exportIOCReport() {
   a.click();
 }
 
+// ── TAXII Sources ─────────────────────────────────────────────────────────────
+async function loadTaxiiSources() {
+  const wrap = document.getElementById('taxii-table-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted);font-size:9px">Loading...</div>';
+  try {
+    const r = await fetch(`${API}/taxii/sources`, {headers:{'Authorization':'Bearer '+getToken()}});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    const sources = d.sources || [];
+    if (!sources.length) {
+      wrap.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted);font-size:9px">No TAXII sources configured. Add feeds to <code style="font-family:var(--mono);font-size:8px">config.py</code></div>';
+      return;
+    }
+    const statusColor = s => ({ok:'var(--green)', error:'var(--red)', timeout:'var(--amber)'})[s] || 'var(--muted)';
+    wrap.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:9px">
+      <thead><tr style="background:var(--bg4)">
+        <th style="padding:7px 10px;text-align:left;color:var(--muted);font-weight:500">Feed ID</th>
+        <th style="padding:7px 10px;text-align:left;color:var(--muted);font-weight:500">URL</th>
+        <th style="padding:7px 10px;text-align:left;color:var(--muted);font-weight:500">Status</th>
+        <th style="padding:7px 10px;text-align:left;color:var(--muted);font-weight:500">Collections</th>
+        <th style="padding:7px 10px;text-align:left;color:var(--muted);font-weight:500">Objects</th>
+        <th style="padding:7px 10px;text-align:left;color:var(--muted);font-weight:500">Last Checked</th>
+        <th style="padding:7px 10px"></th>
+      </tr></thead>
+      <tbody>${sources.map(s => `
+        <tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:7px 10px;font-family:var(--mono);font-size:8px;color:var(--teal)">${s.id||'—'}</td>
+          <td style="padding:7px 10px;color:var(--muted);font-size:8px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${s.url||''}">${s.url||'—'}</td>
+          <td style="padding:7px 10px">
+            <span style="font-size:8px;font-weight:600;color:${statusColor(s.status)}">${(s.status||'unknown').toUpperCase()}</span>
+            ${s.error?`<div style="font-size:7px;color:var(--red);margin-top:2px">${s.error.slice(0,80)}</div>`:''}
+          </td>
+          <td style="padding:7px 10px;color:var(--muted)">${s.collection_count!=null?s.collection_count:'—'}</td>
+          <td style="padding:7px 10px;color:var(--muted)">${s.object_count!=null?s.object_count.toLocaleString():'—'}</td>
+          <td style="padding:7px 10px;color:var(--muted);font-size:8px">${(s.last_checked||'Never').slice(0,16).replace('T',' ')}</td>
+          <td style="padding:7px 10px">
+            <button class="btn sm" id="taxii-test-${s.id}" onclick="testTaxiiFeed('${s.id}')">Test</button>
+          </td>
+        </tr>
+      `).join('')}</tbody>
+    </table>`;
+  } catch(e) { wrap.innerHTML = `<div style="text-align:center;padding:30px;color:var(--red);font-size:9px">Error: ${e.message}</div>`; }
+}
+
+async function testTaxiiFeed(feedId) {
+  const btn = document.getElementById('taxii-test-' + feedId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Testing…'; }
+  try {
+    const r = await fetch(`${API}/taxii/test/${encodeURIComponent(feedId)}`, {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + getToken()}
+    });
+    const d = r.ok ? await r.json() : null;
+    if (d && d.status === 'ok') toast(`${feedId}: connected (${d.collection_count||0} collections)`, 'success');
+    else toast(`${feedId}: ${d?.error || 'connection failed'}`, 'error');
+    setTimeout(loadTaxiiSources, 1000);
+  } catch(e) {
+    toast('Test failed: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Test'; }
+  }
+}
+
 // ── Import History ────────────────────────────────────────────────────────────
 async function loadHistory() {
   const clientId = document.getElementById('hist-client').value;
   let url = `${API}/upload/history?limit=200`;
   if (clientId) url += `&client_id=${clientId}`;
   try {
-    const r = await fetch(url);
+    const r = await fetch(url, {headers:{'Authorization':'Bearer '+getToken()}});
     if (!r.ok) throw new Error('Failed');
     let rows = await r.json();
     if (histStatusFilter) rows = rows.filter(r=>r.status===histStatusFilter);

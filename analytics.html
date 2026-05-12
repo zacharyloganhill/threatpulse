@@ -65,6 +65,9 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
   <button class="dbtn" onclick="setPeriod(30,this)">30d</button>
   <button class="dbtn on" onclick="setPeriod(90,this)">90d</button>
   <button class="dbtn" onclick="setPeriod(60,this)">60d</button>
+  <div class="vsep"></div>
+  <button class="dbtn" onclick="exportAnalyticsReport()" title="Export items as CSV">&#8595; CSV</button>
+  <button class="dbtn" onclick="exportCharts()" title="Export charts as PNG images">&#8595; Charts</button>
 </div>
 
 <div class="page">
@@ -113,6 +116,14 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
     <div id="top-risks" style="overflow-y:auto;max-height:220px"></div>
   </div>
 
+  <!-- Vendor × Severity Heatmap -->
+  <div class="chart-card wide">
+    <div class="chtitle">Vendor × Severity Heatmap</div>
+    <div id="heatmap-grid" style="overflow-x:auto;margin-top:6px">
+      <div style="color:var(--muted);font-size:9px;text-align:center;padding:20px">Loading...</div>
+    </div>
+  </div>
+
   <!-- Client benchmark leaderboard -->
   <div class="chart-card wide" id="benchmark-card">
     <div class="chtitle" style="display:flex;align-items:center;justify-content:space-between">
@@ -124,10 +135,41 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
     </div>
   </div>
 
+  <!-- Posture score history (client-specific) -->
+  <div class="chart-card" id="posture-hist-card" style="display:none">
+    <div class="chtitle">Posture Score History</div>
+    <div class="chart-wrap"><canvas id="posture-hist-chart"></canvas></div>
+  </div>
+
+  <!-- IBM 2024 industry breach costs -->
+  <div class="chart-card">
+    <div class="chtitle" style="display:flex;align-items:center;justify-content:space-between">
+      <span>IBM 2024 Industry Breach Costs</span>
+      <span style="font-size:7px;color:var(--muted);font-weight:400;letter-spacing:0">Source: IBM Cost of a Data Breach Report 2024</span>
+    </div>
+    <div id="breach-cost-table" style="margin-top:6px">
+      <div style="color:var(--muted);font-size:9px;padding:16px 0;text-align:center">Loading...</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Industry Benchmark Modal -->
+<div id="ind-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:1000;align-items:center;justify-content:center" onclick="if(event.target===this)closeIndModal()">
+  <div style="background:var(--bg2);border:1px solid var(--border2);padding:24px;width:480px;max-width:95vw;position:relative">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div>
+        <div style="font-size:8px;letter-spacing:2px;color:var(--teal);text-transform:uppercase">Industry Benchmark</div>
+        <div id="ind-modal-name" style="font-size:14px;font-weight:700;margin-top:2px"></div>
+      </div>
+      <button onclick="closeIndModal()" style="font-family:var(--mono);font-size:10px;background:transparent;border:1px solid var(--border);color:var(--muted);padding:4px 10px;cursor:pointer">✕ CLOSE</button>
+    </div>
+    <div id="ind-modal-body"></div>
+  </div>
 </div>
 
 <script>
-const API = 'http://localhost:8000/api/v1';
+const API = '/api/v1';
 const SC = {CRITICAL:'#f0595a',HIGH:'#e8a530',MEDIUM:'#4d9de0',LOW:'#4e5d72',INFO:'#9b8ef5'};
 let state = {client_id: '', days: 90};
 const charts = {};
@@ -141,9 +183,11 @@ const CHART_DEFAULTS = {
   }
 };
 
+function getToken() { return localStorage.getItem('token') || localStorage.getItem('pf_token') || ''; }
+
 async function apiFetch(path) {
   try {
-    const r = await fetch(API + path);
+    const r = await fetch(API + path, {headers: {'Authorization': 'Bearer ' + getToken()}});
     if (!r.ok) return null;
     return await r.json();
   } catch { return null; }
@@ -159,8 +203,9 @@ function qs(extra = {}) {
 async function loadClients() {
   const d = await apiFetch('/admin/clients');
   if (!d) return;
+  const clients = Array.isArray(d) ? d : (d.clients || []);
   const sel = document.getElementById('client-sel');
-  (d.clients || []).forEach(c => {
+  clients.forEach(c => {
     const opt = document.createElement('option');
     opt.value = c.id; opt.textContent = c.name;
     sel.appendChild(opt);
@@ -310,9 +355,18 @@ async function loadVendorChart() {
 }
 
 async function loadMTTRChart() {
+  destroyChart('mttr-chart');
+  const wrap = document.getElementById('mttr-chart')?.parentElement;
   if (!state.client_id) {
-    document.getElementById('mttr-chart').parentElement.innerHTML += '<div style="color:var(--muted);font-size:9px;padding:20px">Select a client to view MTTR trend</div>';
+    if (wrap) {
+      wrap.innerHTML = '<canvas id="mttr-chart"></canvas><div id="mttr-msg" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:9px;pointer-events:none">Select a client to view MTTR trend</div>';
+      wrap.style.position = 'relative';
+    }
     return;
+  }
+  if (wrap) {
+    const msg = document.getElementById('mttr-msg');
+    if (msg) msg.remove();
   }
   const d = await apiFetch('/analytics/remediation-trend' + qs());
   if (!d || !d.data.length) return;
@@ -392,7 +446,7 @@ async function loadBenchmarks() {
             <tr style="border-bottom:1px solid var(--border)">
               <td style="padding:8px;font-size:10px;color:var(--muted)">#${c.rank}</td>
               <td style="padding:8px;font-size:10px;font-weight:600">${esc(c.client_name)}</td>
-              <td style="padding:8px;font-size:9px;color:var(--muted)">${esc(c.industry || '—')}</td>
+              <td style="padding:8px;font-size:9px;color:var(--teal);cursor:pointer;text-decoration:underline" onclick="showIndustryBenchmark('${esc(c.industry||'')}')">${esc(c.industry || '—')}</td>
               <td style="padding:8px;font-size:12px;font-weight:700;color:${gradeColor(c.grade)}">${c.score != null ? c.score.toFixed(1) : '—'}</td>
               <td style="padding:8px">
                 <div style="width:180px;height:5px;background:rgba(255,255,255,.06);border-radius:2px">
@@ -412,14 +466,125 @@ async function loadBenchmarks() {
   }
 }
 
+async function loadHeatmap() {
+  const el = document.getElementById('heatmap-grid');
+  const d = await apiFetch('/analytics/heatmap' + qs());
+  if (!d || !d.vendors || !d.vendors.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:9px;text-align:center;padding:20px">No data</div>';
+    return;
+  }
+  const sevs = ['CRITICAL','HIGH','MEDIUM','LOW'];
+  const maxVal = Math.max(1, ...d.vendors.flatMap(v => sevs.map(s => (d.matrix[v]||{})[s]||0)));
+  const cellBg = (sev, cnt) => {
+    if (!cnt) return 'rgba(255,255,255,.03)';
+    const intens = Math.round((cnt / maxVal) * 80) + 10;
+    const cols = {CRITICAL:`rgba(240,89,90,`, HIGH:`rgba(232,165,48,`, MEDIUM:`rgba(77,157,224,`, LOW:`rgba(78,93,114,`};
+    return (cols[sev]||'rgba(155,142,245,')+`${intens/100})`;
+  };
+  el.innerHTML = `
+    <table style="border-collapse:collapse;min-width:100%">
+      <thead><tr>
+        <th style="text-align:left;font-size:8px;color:var(--muted);padding:5px 10px;font-weight:400;white-space:nowrap">VENDOR</th>
+        ${sevs.map(s=>`<th style="font-size:8px;color:${SC[s]};padding:5px 14px;font-weight:600;text-align:center">${s}</th>`).join('')}
+        <th style="font-size:8px;color:var(--muted);padding:5px 10px;font-weight:400;text-align:right">TOTAL</th>
+      </tr></thead>
+      <tbody>
+        ${d.vendors.map(v=>{
+          const row = d.matrix[v]||{};
+          const total = sevs.reduce((s,sv)=>s+(row[sv]||0),0);
+          return `<tr>
+            <td style="font-size:9px;padding:5px 10px;white-space:nowrap;border-bottom:1px solid rgba(255,255,255,.03)">${esc(v.slice(0,22))}</td>
+            ${sevs.map(s=>{
+              const cnt=row[s]||0;
+              return `<td style="text-align:center;padding:4px 14px;border-bottom:1px solid rgba(255,255,255,.03);background:${cellBg(s,cnt)}">
+                <span style="font-size:10px;font-weight:${cnt?'700':'400'};color:${cnt?SC[s]:'var(--muted)'}">${cnt||'·'}</span>
+              </td>`;
+            }).join('')}
+            <td style="text-align:right;padding:5px 10px;font-size:9px;color:var(--muted);border-bottom:1px solid rgba(255,255,255,.03)">${total}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+}
+
+async function loadPostureHistory() {
+  const card = document.getElementById('posture-hist-card');
+  if (!state.client_id) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const d = await apiFetch(`/clients/${state.client_id}/posture/history?limit=30`);
+  if (!d || !d.length) {
+    card.querySelector('.chart-wrap').innerHTML = '<div style="color:var(--muted);font-size:9px;padding:40px 0;text-align:center">No posture history yet — scores are recorded on each validation run</div>';
+    return;
+  }
+  const rows = [...d].reverse();
+  const labels = rows.map(r => r.calculated_at ? r.calculated_at.slice(0,10) : '');
+  const scores = rows.map(r => r.score != null ? +r.score.toFixed(1) : null);
+  const gradeColor = g => ({'A':'#3dd68c','B':'#00d4aa','C':'#e8a530','D':'#f0595a','F':'#f0595a'}[g] || '#4e5d72');
+  const pointColors = rows.map(r => gradeColor(r.grade));
+  destroyChart('posture-hist-chart');
+  const canvas = document.getElementById('posture-hist-chart');
+  charts['posture-hist-chart'] = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Posture Score',
+        data: scores,
+        borderColor: '#00d4aa',
+        backgroundColor: 'rgba(0,212,170,.08)',
+        pointBackgroundColor: pointColors,
+        pointRadius: 4, borderWidth: 1.5, tension: 0.3, fill: true,
+      }]
+    },
+    options: {
+      ...CHART_DEFAULTS,
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: {...CHART_DEFAULTS.scales.x},
+        y: {...CHART_DEFAULTS.scales.y, min: 0, max: 100,
+             title:{display:true,text:'Score',color:'#4e5d72',font:{size:9}}},
+      }
+    }
+  });
+}
+
+async function loadBreachCostIndustries() {
+  const el = document.getElementById('breach-cost-table');
+  const d = await apiFetch('/breach-cost/industries');
+  if (!d || !d.costs) { el.innerHTML = '<div style="color:var(--muted);font-size:9px;text-align:center;padding:16px">Unavailable</div>'; return; }
+  const costs = Object.entries(d.costs).sort((a,b) => b[1] - a[1]);
+  const maxCost = costs[0][1];
+  const fmt = n => '$' + (n / 1_000_000).toFixed(2) + 'M';
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse">
+    <thead><tr style="border-bottom:1px solid var(--border)">
+      <th style="text-align:left;font-size:8px;color:var(--muted);letter-spacing:1px;padding:4px 6px;font-weight:400">INDUSTRY</th>
+      <th style="text-align:right;font-size:8px;color:var(--muted);letter-spacing:1px;padding:4px 6px;font-weight:400">AVG BREACH COST</th>
+      <th style="text-align:left;font-size:8px;color:var(--muted);letter-spacing:1px;padding:4px 6px;font-weight:400;min-width:140px">RELATIVE EXPOSURE</th>
+    </tr></thead>
+    <tbody>
+      ${costs.map(([ind, cost]) => {
+        const pct = Math.round((cost / maxCost) * 100);
+        const color = cost >= 8_000_000 ? 'var(--red)' : cost >= 5_000_000 ? 'var(--amber)' : cost >= 4_000_000 ? 'var(--blue)' : 'var(--muted)';
+        return `<tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:6px;font-size:10px;font-weight:600">${esc(ind)}</td>
+          <td style="padding:6px;text-align:right;font-size:11px;font-weight:700;color:${color}">${fmt(cost)}</td>
+          <td style="padding:6px">
+            <div style="height:4px;background:rgba(255,255,255,.06);border-radius:2px">
+              <div style="width:${pct}%;height:4px;background:${color};border-radius:2px"></div>
+            </div>
+          </td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>`;
+}
+
 async function loadAll() {
-  document.getElementById('last-updated').textContent = 'Loading...';
   await Promise.all([
     loadSummary(), loadTrend(), loadSevDoughnut(),
     loadCategoryChart(), loadVendorChart(), loadMTTRChart(), loadTopRisks(),
-    loadBenchmarks()
+    loadBenchmarks(), loadHeatmap(), loadPostureHistory(), loadBreachCostIndustries()
   ]);
-  document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
 }
 
 function switchClient() {
@@ -436,7 +601,7 @@ function setPeriod(days, btn) {
 
 function exportCharts() {
   const canvases = document.querySelectorAll('canvas');
-  if (!canvases.length) { alert('No charts to export'); return; }
+  if (!canvases.length) { toast('No charts to export', 'error'); return; }
   canvases.forEach((canvas, i) => {
     canvas.toBlob(blob => {
       const a = document.createElement('a');
@@ -448,12 +613,74 @@ function exportCharts() {
 }
 
 function exportAnalyticsReport() {
-  const clientId = document.getElementById('client-sel').value;
-  const days = document.getElementById('days-sel').value;
   let url = '/api/v1/export/items.csv?limit=5000';
-  if (clientId) url += '&client_id=' + clientId;
-  if (days) url += '&days=' + days;
+  if (state.client_id) url += '&client_id=' + state.client_id;
+  if (state.days) url += '&days=' + state.days;
   window.open(url, '_blank');
+}
+
+function closeIndModal() {
+  document.getElementById('ind-modal').style.display = 'none';
+}
+
+async function showIndustryBenchmark(industry) {
+  if (!industry || industry === '—') return;
+  const modal = document.getElementById('ind-modal');
+  const body = document.getElementById('ind-modal-body');
+  document.getElementById('ind-modal-name').textContent = industry;
+  modal.style.display = 'flex';
+  body.innerHTML = '<div style="color:var(--muted);font-size:9px;text-align:center;padding:24px">Loading...</div>';
+  const d = await apiFetch('/benchmarks/' + encodeURIComponent(industry));
+  if (!d || !d.baseline) {
+    body.innerHTML = '<div style="color:var(--muted);font-size:9px;text-align:center;padding:24px">No benchmark data for this industry</div>';
+    return;
+  }
+  const b = d.baseline;
+  const kpis = [
+    {label:'Avg Score',    val: b.avg_score,      suffix:'', color:'var(--teal)'},
+    {label:'Median Score', val: b.p50,             suffix:'', color:'var(--blue)'},
+    {label:'Avg MTTR',     val: b.avg_mttr_days,   suffix:'d', color:'var(--muted)'},
+    {label:'Avg SLA %',    val: b.avg_sla_pct,     suffix:'%', color:'var(--muted)'},
+    {label:'Median Open Criticals', val: b.med_open_crit, suffix:'', color:'var(--amber)'},
+  ];
+  const pctiles = [
+    {label:'Top 10%', val: b.p90}, {label:'Top 25%', val: b.p75},
+    {label:'Median',  val: b.p50}, {label:'Bottom 25%', val: b.p25},
+  ];
+  body.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">
+      ${kpis.slice(0,3).map(k=>`
+        <div style="background:var(--bg3);border:1px solid var(--border);padding:10px;text-align:center">
+          <div style="font-size:20px;font-weight:700;color:${k.color}">${k.val != null ? k.val + k.suffix : '—'}</div>
+          <div style="font-size:7px;letter-spacing:1.2px;color:var(--muted);margin-top:3px;text-transform:uppercase">${k.label}</div>
+        </div>`).join('')}
+    </div>
+    <div style="font-size:8px;letter-spacing:1px;color:var(--muted);margin-bottom:8px">IBM/PONEMON PERCENTILE THRESHOLDS</div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
+      <thead><tr style="border-bottom:1px solid var(--border)">
+        ${pctiles.map(p=>`<th style="text-align:center;font-size:8px;color:var(--muted);padding:4px;font-weight:400">${p.label}</th>`).join('')}
+      </tr></thead>
+      <tbody><tr>
+        ${pctiles.map(p=>`<td style="text-align:center;padding:8px;font-size:14px;font-weight:700;color:var(--text)">${p.val != null ? p.val : '—'}</td>`).join('')}
+      </tr></tbody>
+    </table>
+    <div style="font-size:8px;color:var(--muted)">Avg SLA compliance: <b style="color:var(--text)">${b.avg_sla_pct != null ? b.avg_sla_pct + '%' : '—'}</b> &nbsp;·&nbsp; Median open criticals: <b style="color:var(--amber)">${b.med_open_crit != null ? b.med_open_crit : '—'}</b></div>`;
+}
+
+function toast(msg, type='info', dur=3500) {
+  let c = document.getElementById('analytics-toast-container');
+  if (!c) {
+    c = document.createElement('div');
+    c.id = 'analytics-toast-container';
+    c.style.cssText = 'position:fixed;bottom:16px;right:16px;display:flex;flex-direction:column;gap:6px;z-index:10000';
+    document.body.appendChild(c);
+  }
+  const colors = {success:'rgba(61,214,140,.4)',error:'rgba(240,89,90,.4)',info:'rgba(77,157,224,.4)'};
+  const t = document.createElement('div');
+  t.style.cssText = `padding:8px 14px;background:var(--bg2);border:1px solid ${colors[type]||colors.info};border-radius:4px;font-size:10px;color:var(--text);display:flex;gap:8px;align-items:center;min-width:200px;animation:fadeIn .2s ease`;
+  t.innerHTML = `<span style="flex:1">${msg}</span><span style="cursor:pointer;opacity:.5" onclick="this.parentElement.remove()">✕</span>`;
+  c.appendChild(t);
+  if (dur) setTimeout(() => t.remove(), dur);
 }
 
 (async () => {

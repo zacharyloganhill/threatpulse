@@ -285,6 +285,7 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
           <div class="det-actions">
             <button class="act-btn" onclick="openEditModal()">EDIT</button>
             <button class="act-btn primary" id="pullNowBtn" onclick="pullNow()">PULL NOW</button>
+            <button class="act-btn" id="deleteIntBtn" onclick="deleteIntegration()" style="border-color:rgba(240,89,90,.3);color:var(--red)" onmouseover="this.style.background='var(--red-d)'" onmouseout="this.style.background=''">DELETE</button>
           </div>
         </div>
         <div class="detail-body">
@@ -509,11 +510,6 @@ async function selectIntegration(id, configType) {
   showView('detail');
   renderSidebar();
 
-  const config = configType === 'scanner'
-    ? await fetch(`${API}/clients/_/scanners/${id}`, {headers: authHdr()}).then(r=>r.ok?r.json():null).catch(()=>null)
-    : await fetch(`${API}/clients/_/siems/${id}`, {headers: authHdr()}).then(r=>r.ok?r.json():null).catch(()=>null);
-
-  // Fall back to finding from the all-integrations listing
   const fromList = (configType === 'scanner' ? state.integrations.scanners : state.integrations.siems)
     .find(s => s.id === id);
 
@@ -651,6 +647,35 @@ async function pullNow() {
   } catch(e) { btn.disabled = false; btn.textContent = 'PULL NOW'; }
 }
 
+async function deleteIntegration() {
+  const fromList = (state.selectedConfigType === 'scanner' ? state.integrations.scanners : state.integrations.siems)
+    .find(s => s.id === state.selectedId);
+  if (!fromList) return;
+  const label = fromList.label || state.selectedId;
+  if (!confirm(`Delete "${label}"? This cannot be undone.`)) return;
+  const btn = document.getElementById('deleteIntBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'DELETING...'; }
+  const path = state.selectedConfigType === 'scanner'
+    ? `clients/${fromList.client_id}/scanners/${state.selectedId}`
+    : `clients/${fromList.client_id}/siems/${state.selectedId}`;
+  try {
+    const res = await fetch(`${API}/${path}`, {method: 'DELETE', headers: authHdr()});
+    if (res.ok || res.status === 204) {
+      toast(`${label} deleted`, 'success');
+      state.selectedId = null;
+      state.selectedConfigType = null;
+      await loadSidebar();
+      showView('empty');
+    } else {
+      toast('Delete failed: ' + res.status, 'error');
+      if (btn) { btn.disabled = false; btn.textContent = 'DELETE'; }
+    }
+  } catch(e) {
+    toast('Delete failed: ' + e.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = 'DELETE'; }
+  }
+}
+
 // ── Edit modal ────────────────────────────────────────────────────────────────
 function openEditModal() {
   const fromList = (state.selectedConfigType === 'scanner' ? state.integrations.scanners : state.integrations.siems)
@@ -703,7 +728,7 @@ async function startWizard(mode) {
   if (!state.clients.length) {
     try {
       const r = await fetch(`${API}/admin/clients`, {headers: authHdr()});
-      if (r.ok) { const d = await r.json(); state.clients = d.clients || []; }
+      if (r.ok) { const d = await r.json(); state.clients = Array.isArray(d) ? d : (d.clients || []); }
     } catch(e) {}
   }
 }
@@ -892,13 +917,13 @@ async function scannerNext() {
   const step = state.wizardStep;
 
   if (step === 1) {
-    if (!state.wizardData.type) { alert('Please select a scanner type.'); return; }
+    if (!state.wizardData.type) { toast('Please select a scanner type.', 'warn'); return; }
     state.wizardStep = 2; renderStepBar(); renderWizardStep();
   }
   else if (step === 2) {
     const label = document.getElementById('f_label')?.value.trim();
     const client = document.getElementById('f_client')?.value;
-    if (!label || !client) { alert('Label and client are required.'); return; }
+    if (!label || !client) { toast('Label and client are required.', 'warn'); return; }
     state.wizardData.label     = label;
     state.wizardData.client_id = client;
     state.wizardData.host_url  = document.getElementById('f_host')?.value || '';
@@ -911,7 +936,7 @@ async function scannerNext() {
     runScannerTest();
   }
   else if (step === 3) {
-    if (!state.testResults?.success) { alert('Connection test must pass before continuing.'); return; }
+    if (!state.testResults?.success) { toast('Connection test must pass before continuing.', 'warn'); return; }
     state.wizardStep = 4; renderStepBar(); renderWizardStep();
   }
   else if (step === 4) {
@@ -933,13 +958,17 @@ async function scannerNext() {
   }
 }
 
+function renderScannerStep3Loading() {
+  document.getElementById('btnNext').disabled = true;
+  setTimeout(runScannerTest, 100);
+  return `<div class="test-spinner">
+    <div class="spinner-ring"></div>
+    <div>Testing connection to ${esc(SCANNER_TYPES[state.wizardData.type]?.label||state.wizardData.type)}...</div>
+    <div style="font-size:8px;color:var(--muted)">Authenticating · Checking permissions · Discovering assets</div>
+  </div>`;
+}
+
 async function runScannerTest() {
-  document.getElementById('wizardContent').innerHTML = `
-    <div class="test-spinner">
-      <div class="spinner-ring"></div>
-      <div>Testing connection to ${esc(SCANNER_TYPES[state.wizardData.type]?.label||state.wizardData.type)}...</div>
-      <div style="font-size:8px;color:var(--muted)">Authenticating · Checking permissions · Discovering assets</div>
-    </div>`;
   document.getElementById('btnNext').disabled = true;
 
   try {
@@ -985,7 +1014,7 @@ function renderScannerTestResults(d) {
     html += `<div class="form-hint" style="margin-top:10px">Sample fields detected: ${d.sample_fields.slice(0,10).map(f=>`<code style="background:var(--bg3);padding:1px 4px">${esc(f)}</code>`).join(' ')}</div>`;
   }
   if (!d.success) {
-    html += `<br><button class="w-btn danger" onclick="() => { state.wizardStep=2; renderStepBar(); renderWizardStep(); }">&#8592; FIX CREDENTIALS</button>`;
+    html += `<br><button class="w-btn danger" onclick="state.wizardStep=2;renderStepBar();renderWizardStep()">&#8592; FIX CREDENTIALS</button>`;
   }
   content.innerHTML = html;
 }
@@ -1171,14 +1200,14 @@ async function saveScanner() {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      alert(`Failed to save: ${err.detail || res.status}`);
+      toast(`Failed to save: ${err.detail || res.status}`, 'error');
       btn.disabled = false; btn.textContent = 'SAVE ✓'; return;
     }
     const saved = await res.json();
     await loadSidebar();
     selectIntegration(saved.id, 'scanner');
   } catch(e) {
-    alert('Save failed: ' + e.message);
+    toast('Save failed: ' + e.message, 'error');
     btn.disabled = false; btn.textContent = 'SAVE ✓';
   }
 }
@@ -1530,13 +1559,13 @@ async function siemNext() {
   const step = state.wizardStep;
 
   if (step === 1) {
-    if (!state.wizardData.type) { alert('Please select a SIEM type.'); return; }
+    if (!state.wizardData.type) { toast('Please select a SIEM type.', 'warn'); return; }
     state.wizardStep = 2; renderStepBar(); renderWizardStep();
   }
   else if (step === 2) {
     const label = document.getElementById('f_label')?.value.trim();
     const client = document.getElementById('f_client')?.value;
-    if (!label || !client) { alert('Label and client are required.'); return; }
+    if (!label || !client) { toast('Label and client are required.', 'warn'); return; }
     state.wizardData.label      = label;
     state.wizardData.client_id  = client;
     state.wizardData.host_url   = document.getElementById('f_host')?.value || '';
@@ -1550,7 +1579,7 @@ async function siemNext() {
   }
   else if (step === 3) {
     const q = document.getElementById('f_query')?.value.trim();
-    if (!q) { alert('A query is required.'); return; }
+    if (!q) { toast('A query is required.', 'warn'); return; }
     state.wizardData.query   = q;
     state.wizardData.lookback = document.getElementById('f_lookback')?.value || '24h';
     state.wizardData.maxResults = parseInt(document.getElementById('f_max_results')?.value) || 1000;
@@ -1558,7 +1587,7 @@ async function siemNext() {
     state.wizardStep = 4; renderStepBar(); renderWizardStep();
   }
   else if (step === 4) {
-    if (!state.testResults?.success) { alert('Connection test must pass before continuing.'); return; }
+    if (!state.testResults?.success) { toast('Connection test must pass before continuing.', 'warn'); return; }
     state.wizardStep = 5; renderStepBar(); renderWizardStep();
   }
   else if (step === 5) {
@@ -1607,14 +1636,14 @@ async function saveSiem() {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      alert(`Failed to save: ${err.detail || res.status}`);
+      toast(`Failed to save: ${err.detail || res.status}`, 'error');
       btn.disabled = false; btn.textContent = 'SAVE ✓'; return;
     }
     const saved = await res.json();
     await loadSidebar();
     selectIntegration(saved.id, 'siem');
   } catch(e) {
-    alert('Save failed: ' + e.message);
+    toast('Save failed: ' + e.message, 'error');
     btn.disabled = false; btn.textContent = 'SAVE ✓';
   }
 }
@@ -1634,6 +1663,23 @@ window.togglePw = function(id, btn) {
   inp.type = inp.type === 'password' ? 'text' : 'password';
   btn.style.opacity = inp.type === 'text' ? '1' : '.5';
 };
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function toast(msg, type='info', dur=3500) {
+  let c = document.getElementById('integrations-toast-container');
+  if (!c) {
+    c = document.createElement('div');
+    c.id = 'integrations-toast-container';
+    c.style.cssText = 'position:fixed;bottom:16px;right:16px;display:flex;flex-direction:column;gap:6px;z-index:10000';
+    document.body.appendChild(c);
+  }
+  const colors = {success:'rgba(61,214,140,.4)',error:'rgba(240,89,90,.4)',info:'rgba(77,157,224,.4)',warn:'rgba(232,165,48,.4)'};
+  const t = document.createElement('div');
+  t.style.cssText = `padding:8px 14px;background:var(--bg2);border:1px solid ${colors[type]||colors.info};border-radius:4px;font-family:var(--mono);font-size:10px;color:var(--text);display:flex;gap:10px;align-items:center;min-width:200px`;
+  t.innerHTML = `<span style="flex:1">${msg}</span><span style="cursor:pointer;opacity:.5" onclick="this.parentElement.remove()">✕</span>`;
+  c.appendChild(t);
+  if (dur) setTimeout(() => t.remove(), dur);
+}
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 showView('empty');

@@ -165,7 +165,7 @@ function toast(msg, type='info', dur=3000) {
   if (dur) setTimeout(()=>t.remove(), dur);
 }
 
-function getToken() { return localStorage.getItem('pf_token') || ''; }
+function getToken() { return localStorage.getItem('token') || localStorage.getItem('pf_token') || ''; }
 
 function esc(s) {
   if (!s) return '';
@@ -283,14 +283,33 @@ async function deleteVendor(vid) {
 
 async function scanVendors() {
   if (!clientId) return;
-  toast('Risk scan started...', 'info', 5000);
+  const btn = document.querySelector('[onclick="scanVendors()"]');
+  if (btn) { btn.textContent = '⟳ Scanning...'; btn.disabled = true; }
+  document.getElementById('sb-dot').style.background = 'var(--amber)';
+  document.getElementById('sb-status').textContent = 'SCANNING VENDORS...';
+  toast('Risk scan started — checking threat intelligence feeds', 'info', 4000);
   const r = await api(`/clients/${clientId}/vendors/scan`, {method:'POST'});
   if (r) {
-    setTimeout(async () => {
-      await loadVendors();
-      await loadGraph();
-      toast('Risk scan complete', 'success');
-    }, 3000);
+    let elapsed = 0;
+    const poll = setInterval(async () => {
+      elapsed += 2;
+      document.getElementById('sb-status').textContent = `SCANNING... ${elapsed}s`;
+      if (elapsed >= 8) {
+        clearInterval(poll);
+        await loadVendors();
+        await loadGraph();
+        if (btn) { btn.textContent = 'Run Risk Scan'; btn.disabled = false; }
+        document.getElementById('sb-dot').style.background = 'var(--green)';
+        document.getElementById('sb-status').textContent = 'SCAN COMPLETE';
+        toast('Risk scan complete — vendor threat levels updated', 'success');
+        setTimeout(() => { document.getElementById('sb-status').textContent = 'READY'; }, 5000);
+      }
+    }, 2000);
+  } else {
+    if (btn) { btn.textContent = 'Run Risk Scan'; btn.disabled = false; }
+    document.getElementById('sb-dot').style.background = 'var(--muted)';
+    document.getElementById('sb-status').textContent = 'SCAN FAILED';
+    toast('Scan request failed', 'error');
   }
 }
 

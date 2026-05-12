@@ -89,6 +89,10 @@ tr:hover td{background:var(--bg3)}
 @keyframes dots{0%{content:''}33%{content:'.'}66%{content:'..'}100%{content:'...'}}
 
 body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px)}
+.toast-container{position:fixed;bottom:20px;right:20px;z-index:10000;display:flex;flex-direction:column;gap:6px}
+.toast{padding:9px 14px;background:var(--bg2,#0c0f14);border:1px solid var(--border,rgba(255,255,255,.07));font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text,#c9d4e3);display:flex;align-items:center;gap:10px;min-width:220px;animation:toastIn .2s ease;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+@keyframes toastIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:translateX(0)}}
+.toast.success{border-color:rgba(61,214,140,.4)}.toast.error{border-color:rgba(240,89,90,.4)}.toast.info{border-color:rgba(77,157,224,.4)}
 </style>
 </head>
 <body data-page-title="FEDRAMP 20x" data-back-url="/index.html">
@@ -106,6 +110,30 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
   <button class="btn primary" onclick="downloadExecutiveReport()">⬇ Executive Report PDF</button>
   <div class="spacer"></div>
   <div id="auth-badge-wrap"></div>
+</div>
+
+<!-- Global KSI KPI Bar -->
+<div id="ksi-kpi-bar" style="display:none;background:var(--bg2);border-bottom:1px solid var(--border);padding:8px 20px;gap:0;overflow:hidden">
+  <div style="flex:1;text-align:center;padding:6px 12px;border-right:1px solid var(--border)">
+    <div style="font-size:20px;font-weight:700;color:var(--teal);font-family:var(--mono)" id="kpi-passrate">—</div>
+    <div style="font-size:7px;letter-spacing:1.5px;color:var(--muted);margin-top:2px">PASS RATE</div>
+  </div>
+  <div style="flex:1;text-align:center;padding:6px 12px;border-right:1px solid var(--border)">
+    <div style="font-size:20px;font-weight:700;color:var(--green);font-family:var(--mono)" id="kpi-passing">—</div>
+    <div style="font-size:7px;letter-spacing:1.5px;color:var(--muted);margin-top:2px">PASSING KSIs</div>
+  </div>
+  <div style="flex:1;text-align:center;padding:6px 12px;border-right:1px solid var(--border)">
+    <div style="font-size:20px;font-weight:700;color:var(--amber);font-family:var(--mono)" id="kpi-conditional">—</div>
+    <div style="font-size:7px;letter-spacing:1.5px;color:var(--muted);margin-top:2px">CONDITIONAL</div>
+  </div>
+  <div style="flex:1;text-align:center;padding:6px 12px;border-right:1px solid var(--border)">
+    <div style="font-size:20px;font-weight:700;color:var(--red);font-family:var(--mono)" id="kpi-failing">—</div>
+    <div style="font-size:7px;letter-spacing:1.5px;color:var(--muted);margin-top:2px">FAILING</div>
+  </div>
+  <div style="flex:1;text-align:center;padding:6px 12px">
+    <div style="font-size:20px;font-weight:700;color:var(--text);font-family:var(--mono)" id="kpi-clients">—</div>
+    <div style="font-size:7px;letter-spacing:1.5px;color:var(--muted);margin-top:2px">CLIENTS MONITORED</div>
+  </div>
 </div>
 
 <div class="page">
@@ -167,6 +195,27 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
     <div id="oar-preview" style="font-size:10px;line-height:1.7"></div>
   </div>
 
+  <!-- Cross-Client KSI Summary -->
+  <div class="section" id="ksi-global-section">
+    <div class="section-header" style="display:flex;align-items:center;justify-content:space-between">
+      <span>Cross-Client KSI Overview</span>
+      <button class="btn sm" onclick="loadGlobalKSI()">REFRESH</button>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Client</th>
+        <th>KSIs Passing</th>
+        <th>Conditional</th>
+        <th>Failing</th>
+        <th>Avg Score</th>
+        <th>Status</th>
+      </tr></thead>
+      <tbody id="ksi-global-tbody">
+        <tr><td colspan="6" style="color:var(--muted);font-size:9px;padding:8px 0">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
   <!-- TAXII Feed Status -->
   <div class="section" id="taxii-section">
     <div class="section-header" style="display:flex;align-items:center;justify-content:space-between">
@@ -174,7 +223,7 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
       <button class="btn sm" onclick="loadTAXII()">REFRESH</button>
     </div>
     <table>
-      <thead><tr><th>Feed</th><th>URL</th><th>Status</th><th>Notes</th></tr></thead>
+      <thead><tr><th>Feed</th><th>URL</th><th>Status</th><th>Notes</th><th></th></tr></thead>
       <tbody id="taxii-tbody">
         <tr><td colspan="4" style="color:var(--muted);font-size:9px;padding:8px 0">Loading...</td></tr>
       </tbody>
@@ -216,10 +265,27 @@ body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;b
 
 </div>
 
+<!-- KSI History Modal -->
+<div id="ksi-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--bg2);border:1px solid var(--border2);padding:24px;width:560px;max-width:95vw;position:relative">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div>
+        <div id="ksi-modal-id" style="font-size:8px;letter-spacing:2px;color:var(--teal);text-transform:uppercase"></div>
+        <div id="ksi-modal-name" style="font-size:12px;font-weight:600;margin-top:2px"></div>
+      </div>
+      <button onclick="closeKSIModal()" style="font-family:var(--mono);font-size:10px;background:transparent;border:1px solid var(--border);color:var(--muted);padding:4px 10px;cursor:pointer">✕ CLOSE</button>
+    </div>
+    <canvas id="ksi-hist-canvas" height="180" style="width:100%"></canvas>
+    <div id="ksi-modal-empty" style="display:none;text-align:center;padding:40px;color:var(--muted);font-size:10px">No history recorded yet — runs each validation cycle</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
 const API = '/api/v1';
 function getToken() { return localStorage.getItem('phantomfeed_token') || ''; }
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+let _ksiHistChart = null;
 
 async function loadClients() {
   try {
@@ -285,12 +351,12 @@ async function loadKSI(clientId) {
     grid.innerHTML = results.map(r => {
       const score = Math.round((r.score || 0) * 100);
       const statusClass = r.status || 'unknown';
-      return `<div class="ksi-card ${statusClass}" title="${esc(JSON.stringify(r.details,null,2))}">
+      return `<div class="ksi-card ${statusClass}" style="cursor:pointer" onclick="showKSIHistory('${esc(clientId)}','${esc(r.ksi_id)}','${esc(r.ksi_name||r.ksi_id)}')" title="Click to view history">
         <div class="ksi-id">${esc(r.ksi_id)}</div>
         <div class="ksi-score" style="color:${statusClass==='pass'?'var(--green)':statusClass==='conditional'?'var(--amber)':'var(--red)'}">${score}%</div>
         <div class="ksi-status ${statusClass}">${esc(r.status||'—').toUpperCase()}</div>
         <div class="ksi-name">${esc(r.ksi_name)}</div>
-        <div style="font-size:7px;color:var(--muted);margin-top:4px">${(r.validated_at||'').slice(0,10)}</div>
+        <div style="font-size:7px;color:var(--muted);margin-top:4px">${(r.validated_at||'').slice(0,10)} · <span style="color:var(--teal)">history ▸</span></div>
       </div>`;
     }).join('');
   } catch(e) {
@@ -430,7 +496,7 @@ async function loadOAR(clientId) {
 // ── Actions ─────────────────────────────────────────────────────────────────────
 async function triggerKSIValidation() {
   const clientId = document.getElementById('client-sel').value;
-  if (!clientId) { alert('Select a client first'); return; }
+  if (!clientId) { showToast('Select a client first', 'error'); return; }
   try {
     const r = await fetch(`${API}/clients/${clientId}/ksi/validate`, {
       method:'POST', headers:{Authorization:'Bearer '+getToken()}
@@ -444,14 +510,128 @@ async function triggerKSIValidation() {
 
 function downloadBundle() {
   const clientId = document.getElementById('client-sel').value;
-  if (!clientId) { alert('Select a client first'); return; }
+  if (!clientId) { showToast('Select a client first', 'error'); return; }
   window.open(`${API}/clients/${clientId}/oscal/bundle.zip?token=${getToken()}`, '_blank');
 }
 
 function downloadExecutiveReport() {
   const clientId = document.getElementById('client-sel').value;
-  if (!clientId) { alert('Select a client first'); return; }
+  if (!clientId) { showToast('Select a client first', 'error'); return; }
   window.open(`${API}/clients/${clientId}/report/pdf?token=${getToken()}`, '_blank');
+}
+
+// ── KSI History Modal ────────────────────────────────────────────────────────────
+async function showKSIHistory(clientId, ksiId, ksiName) {
+  const modal = document.getElementById('ksi-modal');
+  const empty = document.getElementById('ksi-modal-empty');
+  const canvas = document.getElementById('ksi-hist-canvas');
+  document.getElementById('ksi-modal-id').textContent = ksiId;
+  document.getElementById('ksi-modal-name').textContent = ksiName;
+  modal.style.display = 'flex';
+  empty.style.display = 'none';
+  canvas.style.display = '';
+  if (_ksiHistChart) { _ksiHistChart.destroy(); _ksiHistChart = null; }
+  try {
+    const r = await fetch(`${API}/clients/${clientId}/ksi/${encodeURIComponent(ksiId)}/history?limit=30`, {
+      headers: {Authorization: 'Bearer ' + getToken()}
+    });
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    const history = (d.history || []).reverse();
+    if (!history.length) { canvas.style.display = 'none'; empty.style.display = ''; return; }
+    const labels = history.map(h => (h.validated_at || '').slice(0, 10));
+    const scores = history.map(h => h.score != null ? +(h.score * 100).toFixed(1) : null);
+    const ptColors = history.map(h =>
+      h.status === 'pass' ? '#3dd68c' : h.status === 'conditional' ? '#e8a530' : '#f0595a');
+    _ksiHistChart = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Score %',
+          data: scores,
+          borderColor: '#00d4aa',
+          backgroundColor: 'rgba(0,212,170,.08)',
+          pointBackgroundColor: ptColors,
+          pointRadius: 5, borderWidth: 1.5, tension: 0.3, fill: true,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {legend: {display: false}},
+        scales: {
+          x: {ticks: {color: '#4e5d72', font: {family: 'JetBrains Mono', size: 8}}, grid: {color: 'rgba(255,255,255,.04)'}},
+          y: {min: 0, max: 100, ticks: {color: '#4e5d72', font: {family: 'JetBrains Mono', size: 8}}, grid: {color: 'rgba(255,255,255,.06)'},
+              title: {display: true, text: 'Score %', color: '#4e5d72', font: {size: 8}}},
+        }
+      }
+    });
+  } catch(e) {
+    canvas.style.display = 'none';
+    empty.style.display = '';
+    empty.textContent = 'Failed to load history';
+  }
+}
+
+function closeKSIModal() {
+  document.getElementById('ksi-modal').style.display = 'none';
+  if (_ksiHistChart) { _ksiHistChart.destroy(); _ksiHistChart = null; }
+}
+
+// Close on backdrop click
+document.addEventListener('click', e => {
+  const modal = document.getElementById('ksi-modal');
+  if (e.target === modal) closeKSIModal();
+});
+
+// ── Cross-Client KSI Summary ─────────────────────────────────────────────────────
+async function loadGlobalKSI() {
+  const tbody = document.getElementById('ksi-global-tbody');
+  try {
+    const r = await fetch(`${API}/admin/ksi/summary`, {headers:{Authorization:'Bearer '+getToken()}});
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    const clients = d.clients || [];
+
+    // Populate KPI bar
+    const kpiBar = document.getElementById('ksi-kpi-bar');
+    if (kpiBar && clients.length) {
+      kpiBar.style.display = 'flex';
+      let totalPassing = 0, totalConditional = 0, totalFailing = 0, totalKSIs = 0;
+      clients.forEach(c => {
+        totalPassing += c.passing || 0;
+        totalConditional += c.conditional || 0;
+        totalFailing += c.failing || 0;
+        totalKSIs += c.total_ksis || 0;
+      });
+      const pct = totalKSIs > 0 ? Math.round(100 * totalPassing / totalKSIs) : 0;
+      document.getElementById('kpi-passrate').textContent = pct + '%';
+      document.getElementById('kpi-passing').textContent = totalPassing;
+      document.getElementById('kpi-conditional').textContent = totalConditional;
+      document.getElementById('kpi-failing').textContent = totalFailing;
+      document.getElementById('kpi-clients').textContent = clients.length;
+    }
+
+    if (!clients.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted);font-size:9px;padding:8px 0">No clients with KSI data yet</td></tr>';
+      return;
+    }
+    tbody.innerHTML = clients.map(c => {
+      const total = c.total_ksis || 0;
+      const auth = c.failing > 0 ? 'NOT AUTHORIZED' : c.conditional > 2 ? 'CONDITIONAL' : total && c.passing === total ? 'AUTHORIZED' : 'PENDING';
+      const authColor = auth === 'AUTHORIZED' ? 'var(--green)' : auth === 'CONDITIONAL' ? 'var(--amber)' : auth === 'NOT AUTHORIZED' ? 'var(--red)' : 'var(--muted)';
+      return `<tr>
+        <td style="font-size:10px;font-weight:600">${esc(c.client_name)}</td>
+        <td style="font-size:10px;color:var(--green)">${c.passing ?? '—'}</td>
+        <td style="font-size:10px;color:var(--amber)">${c.conditional ?? '—'}</td>
+        <td style="font-size:10px;color:var(--red)">${c.failing ?? '—'}</td>
+        <td style="font-size:10px;font-weight:600">${c.avg_score != null ? c.avg_score.toFixed(1) : '—'}</td>
+        <td><span style="font-size:8px;letter-spacing:1px;color:${authColor};font-weight:600">${auth}</span></td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted);font-size:9px">Failed to load KSI summary</td></tr>';
+  }
 }
 
 // ── TAXII Feed Status ────────────────────────────────────────────────────────────
@@ -473,13 +653,33 @@ async function loadTAXII() {
       const stLabel = st === 'skipped_no_cert' ? 'CERT REQUIRED' : st.toUpperCase();
       return `<tr>
         <td style="font-size:9px;font-weight:600">${esc(s.label)}</td>
-        <td style="font-size:9px;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(s.url)}">${esc(s.url)}</td>
+        <td style="font-size:9px;color:var(--muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(s.url)}">${esc(s.url)}</td>
         <td><span style="font-size:8px;color:${stColor};font-weight:600">${stLabel}</span></td>
         <td style="font-size:9px;color:var(--muted)">${esc(s.notes || s.error || '—')}</td>
+        <td><button id="taxii-test-${esc(s.id)}" class="btn sm" onclick="testTAXII('${esc(s.id)}',this)" style="font-size:8px;padding:2px 7px">TEST</button></td>
       </tr>`;
     }).join('');
   } catch(e) {
     tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);font-size:9px">Failed to load TAXII status</td></tr>';
+  }
+}
+
+async function testTAXII(feedId, btn) {
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const r = await fetch(`${API}/taxii/test/${encodeURIComponent(feedId)}`, {
+      method: 'POST', headers: {Authorization: 'Bearer ' + getToken()}
+    });
+    const d = await r.json();
+    const st = d.status || 'unknown';
+    const stColors = {ok:'var(--green)', error:'var(--red)', skipped_no_cert:'var(--amber)', unknown:'var(--muted)'};
+    btn.textContent = st === 'ok' ? '✓ OK' : st === 'skipped_no_cert' ? 'CERT' : '✗ ERR';
+    btn.style.color = stColors[st] || 'var(--muted)';
+  } catch {
+    btn.textContent = '✗ ERR'; btn.style.color = 'var(--red)';
+  } finally {
+    btn.disabled = false;
+    setTimeout(() => { btn.textContent = 'TEST'; btn.style.color = ''; }, 5000);
   }
 }
 
@@ -541,21 +741,31 @@ async function syncMISP() {
     const d = r.ok ? await r.json() : {};
     btn.textContent = 'SYNC NOW';
     btn.disabled = false;
-    alert(d.message || 'Sync triggered — check back in a moment');
+    showToast(d.message || 'MISP sync triggered — refreshing in 5s…');
     setTimeout(loadMISP, 5000);
   } catch(e) {
     btn.textContent = 'SYNC NOW'; btn.disabled = false;
-    alert('Sync failed: ' + e.message);
+    showToast('Sync failed: ' + e.message, 'error');
   }
 }
 
 loadClients();
 loadTAXII();
 loadMISP();
+loadGlobalKSI();
 setInterval(() => {
   const clientId = document.getElementById('client-sel').value;
   if (clientId) loadDashboard();
 }, 120000); // auto-refresh every 2 minutes
+function showToast(msg, type='info', dur=3500) {
+  let c = document.getElementById('fedramp-toast-container');
+  if (!c) { c = document.createElement('div'); c.id='fedramp-toast-container'; c.className='toast-container'; document.body.appendChild(c); }
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.innerHTML = `<span>${msg}</span><span style="margin-left:auto;cursor:pointer;opacity:.5" onclick="this.parentElement.remove()">✕</span>`;
+  c.appendChild(t);
+  if (dur) setTimeout(() => t.remove(), dur);
+}
 </script>
 <script src="/nav-component.js"></script>
 </body>
