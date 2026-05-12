@@ -6,7 +6,7 @@ Auto-docs available at http://localhost:8000/docs
 import json
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from typing import Optional
-from auth.auth import get_current_user
+from auth.auth import get_current_user, require_admin
 from db import database as db
 from ingest import scheduler
 from ingest.risk_score import score_item
@@ -107,14 +107,14 @@ async def list_feeds(_: dict = Depends(get_current_user)):
 
 
 @router.post("/refresh", summary="Trigger an immediate poll of all feeds")
-async def refresh_all(background_tasks: BackgroundTasks, _: dict = Depends(get_current_user)):
+async def refresh_all(background_tasks: BackgroundTasks, _: dict = Depends(require_admin)):
     """Fires all fetchers in the background. Returns immediately."""
     background_tasks.add_task(scheduler.run_all)
     return {"status": "refresh_started", "message": "All feeds are being polled in the background."}
 
 
 @router.post("/refresh/{feed_id}", summary="Trigger an immediate poll of one feed")
-async def refresh_feed(feed_id: str, background_tasks: BackgroundTasks, _: dict = Depends(get_current_user)):
+async def refresh_feed(feed_id: str, background_tasks: BackgroundTasks, _: dict = Depends(require_admin)):
     feed_ids = scheduler.get_feed_ids()
     if feed_id not in feed_ids:
         raise HTTPException(status_code=404, detail=f"Unknown feed: {feed_id}. Known feeds: {feed_ids}")
@@ -123,13 +123,13 @@ async def refresh_feed(feed_id: str, background_tasks: BackgroundTasks, _: dict 
 
 
 @router.delete("/items/purge", summary="Manually purge items older than retention period")
-async def purge(_: dict = Depends(get_current_user)):
+async def purge(_: dict = Depends(require_admin)):
     deleted = await db.purge_old_items()
     return {"status": "ok", "deleted": deleted}
 
 
 @router.post("/items/{item_id}/rescore", summary="Recompute risk score for a single item")
-async def rescore_item(item_id: str, _: dict = Depends(get_current_user)):
+async def rescore_item(item_id: str, _: dict = Depends(require_admin)):
     item = await db.get_item(item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -150,6 +150,6 @@ async def _rescore_all_task():
 
 
 @router.post("/rescore-all", summary="Recompute risk scores for all items in the background")
-async def rescore_all(background_tasks: BackgroundTasks, _: dict = Depends(get_current_user)):
+async def rescore_all(background_tasks: BackgroundTasks, _: dict = Depends(require_admin)):
     background_tasks.add_task(_rescore_all_task)
     return {"status": "rescore_started"}
