@@ -25,6 +25,13 @@ from fastapi.responses import StreamingResponse
 
 router = APIRouter()
 
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+
+
+def _check_size(data: bytes) -> None:
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"File too large (max {MAX_UPLOAD_BYTES // (1024*1024)} MB)")
+
 
 def _scope_client(user: dict, client_id: Optional[str]) -> Optional[str]:
     """Non-admins may only operate on their own client_id."""
@@ -107,6 +114,7 @@ async def upload_scan(
         background_tasks.add_task(_cleanup_old_temp)
 
     data = await file.read()
+    _check_size(data)
     filename = file.filename or "upload.bin"
 
     from uploads.parsers import detect_parser
@@ -273,6 +281,7 @@ async def upload_assets(
     """Preview an asset CSV/XLSX upload."""
     client_id = _scope_client(user, client_id)
     data = await file.read()
+    _check_size(data)
     filename = file.filename or "assets.csv"
 
     from uploads.parsers import GenericCSVParser
@@ -375,6 +384,7 @@ async def upload_iocs(
     """Preview IOC list; triggers enrichment as background task."""
     client_id = _scope_client(user, client_id)
     data = await file.read()
+    _check_size(data)
     filename = file.filename or "iocs.txt"
 
     from uploads.parsers import IOCParser
@@ -423,6 +433,7 @@ async def upload_iocs(
 async def upload_stix(file: UploadFile = File(...), _: dict = Depends(get_current_user)):
     """Parse a STIX 2.1 JSON bundle and import objects as threat items."""
     data = await file.read()
+    _check_size(data)
     filename = file.filename or "bundle.json"
 
     from uploads.parsers import STIXBundleParser
@@ -464,6 +475,7 @@ async def upload_clients(
 ):
     """Preview bulk client import from CSV/XLSX."""
     data = await file.read()
+    _check_size(data)
     filename = file.filename or "clients.csv"
 
     text = data.decode("utf-8", errors="replace")
