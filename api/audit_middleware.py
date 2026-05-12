@@ -41,17 +41,16 @@ def _extract_client_id(path: str) -> str | None:
 
 
 def _extract_username(request: Request) -> tuple[str | None, str | None]:
-    """Extract user info from Authorization header (JWT) without full validation."""
+    """Extract (username, user_id) from Authorization header JWT without full validation."""
     auth = request.headers.get("Authorization", "")
-    if auth.startswith("Bearer "):
-        token = auth[7:]
+    token_str = auth[7:] if auth.startswith("Bearer ") else request.query_params.get("token", "")
+    if token_str:
         try:
             import base64, json as _json
-            # Decode JWT payload (no signature check — just for logging)
-            payload_b64 = token.split(".")[1]
+            payload_b64 = token_str.split(".")[1]
             payload_b64 += "=" * (4 - len(payload_b64) % 4)
             payload = _json.loads(base64.b64decode(payload_b64))
-            return payload.get("sub"), payload.get("user_id")
+            return payload.get("username"), payload.get("sub")
         except Exception:
             pass
     return None, None
