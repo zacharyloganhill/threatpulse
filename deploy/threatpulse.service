@@ -1,0 +1,63 @@
+[Unit]
+Description=ThreatPulse Intelligence Feed
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=threatpulse
+Group=threatpulse
+WorkingDirectory=/opt/threatpulse
+
+# Load secrets from a root-owned env file (chmod 600 /etc/threatpulse/env)
+EnvironmentFile=/etc/threatpulse/env
+
+ExecStart=/opt/threatpulse/.venv/bin/python -m uvicorn main:app \
+    --host 0.0.0.0 \
+    --port 8000 \
+    --workers 1 \
+    --log-level warning
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s
+
+# Security hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/threatpulse /var/lib/threatpulse
+ProtectHome=yes
+CapabilityBoundingSet=
+
+# Resource limits
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+
+# ── Installation ──────────────────────────────────────────────────────────────
+# 1. Create user and directories:
+#      useradd --system --no-create-home --shell /bin/false threatpulse
+#      mkdir -p /opt/threatpulse /var/lib/threatpulse /etc/threatpulse
+#      chown threatpulse:threatpulse /opt/threatpulse /var/lib/threatpulse
+#
+# 2. Deploy application:
+#      cp -r . /opt/threatpulse/
+#      python -m venv /opt/threatpulse/.venv
+#      /opt/threatpulse/.venv/bin/pip install -r /opt/threatpulse/requirements-lock.txt
+#
+# 3. Create secret env file (root-owned, not world-readable):
+#      python scripts/generate-secrets.py > /etc/threatpulse/env
+#      echo "DB_PATH=/var/lib/threatpulse/threatpulse.db" >> /etc/threatpulse/env
+#      chmod 600 /etc/threatpulse/env
+#      chown root:root /etc/threatpulse/env
+#
+# 4. Enable and start:
+#      cp deploy/threatpulse.service /etc/systemd/system/
+#      systemctl daemon-reload
+#      systemctl enable --now threatpulse
+#
+# 5. Check status:
+#      systemctl status threatpulse
+#      journalctl -u threatpulse -f

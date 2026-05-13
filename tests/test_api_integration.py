@@ -218,13 +218,12 @@ class TestIDORProtection:
 class TestPerUserReadState:
     def test_mark_read_is_per_user(self, client, admin_headers):
         """Marking an item read for user A must not affect user B's view."""
-        # Ensure there's at least one item by seeding directly
-        import asyncio
         from db import database as db
         import uuid
 
+        # Run the seed inside TestClient's own event loop so it shares the same
+        # in-memory DB that the running app uses (avoids replacing _db).
         async def _seed():
-            await db.connect()
             item_id = str(uuid.uuid4())[:24]
             await db.get_db().execute(
                 "INSERT OR IGNORE INTO threat_items "
@@ -236,7 +235,7 @@ class TestPerUserReadState:
             await db.get_db().commit()
             return item_id
 
-        item_id = asyncio.get_event_loop().run_until_complete(_seed())
+        item_id = client.portal.call(_seed)
 
         # Create two users
         client.post(
@@ -265,6 +264,18 @@ class TestPerUserReadState:
         # User B must still see it as new
         items_b = client.get("/api/v1/items?is_new=true", headers=hb).json()["items"]
         assert any(i["id"] == item_id for i in items_b), "User B should still see item as new"
+
+
+# ── Health endpoint ──────────────────────────────────────────────────────────
+
+class TestHealthEndpoint:
+    def test_health_unauthenticated(self, client):
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+
+    def test_health_db_field_present(self, client):
+        assert "db" in client.get("/health").json()
 
 
 # ── Request correlation ID ────────────────────────────────────────────────────

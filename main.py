@@ -276,6 +276,22 @@ async def ollama_proxy(path: str, request: Request, user: dict = Depends(get_cur
     return StreamingResponse(_stream(), media_type="application/json")
 
 
+@app.get("/health", include_in_schema=False)
+async def health():
+    """Unauthenticated liveness + readiness probe for load balancers and Docker HEALTHCHECK."""
+    from fastapi.responses import JSONResponse
+    try:
+        _db = db.get_db()
+        async with _db.execute("SELECT 1") as cur:
+            await cur.fetchone()
+        db_ok = True
+    except Exception:
+        db_ok = False
+    if not db_ok:
+        return JSONResponse(status_code=503, content={"status": "degraded", "db": "error"})
+    return {"status": "ok", "db": "ok"}
+
+
 @app.get("/", include_in_schema=False)
 async def root():
     from fastapi.responses import RedirectResponse

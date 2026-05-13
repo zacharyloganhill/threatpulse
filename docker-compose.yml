@@ -1,0 +1,44 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # These override .env so the container always uses the right paths/binding
+      DB_PATH: /data/threatpulse.db
+      HOST: 0.0.0.0
+      PORT: "8000"
+    volumes:
+      - db_data:/data           # persistent database
+      - uploads:/app/uploads/temp
+    # Bind to loopback only — nginx handles all external traffic
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # Mount your TLS certificate and key here:
+      #   fullchain.pem  — certificate + intermediates
+      #   privkey.pem    — private key
+      # e.g. from Let's Encrypt: /etc/letsencrypt/live/<domain>/
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  db_data:
+  uploads:

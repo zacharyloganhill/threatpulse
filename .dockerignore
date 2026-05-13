@@ -1,0 +1,41 @@
+# Version control
+.git
+.gitignore
+
+# Secrets — never bake into image
+.env
+*.env
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+*.egg-info
+
+# Virtual environments
+.venv
+venv
+env
+
+# Database files — should live on a volume, not in the image
+*.db
+*.db-shm
+*.db-wal
+
+# Temp upload files
+uploads/temp/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Tests — not needed at runtime
+tests/
+test_*.py
+
+# Dev tools
+*.log
