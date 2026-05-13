@@ -1,56 +1,169 @@
-# PhantomFeed
+# ThreatPulse
 
-![Python](https://img.shields.io/badge/python-3.12-blue?logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/python-3.13-blue?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Open Source](https://img.shields.io/badge/open%20source-%E2%99%A5-red)
 
-**Real-time threat intelligence aggregation, locally hosted.**
+**Threat intelligence aggregation and FedRAMP 20x continuous monitoring, locally hosted.**
 
-PhantomFeed pulls CVEs, vendor advisories, CISA alerts, malware feeds, and threat intel into a single searchable feed — with a dark-mode dashboard and a local AI analyst powered by Ollama. No SaaS subscriptions, no telemetry, no API bills. Runs entirely on your machine.
+ThreatPulse pulls CVEs, CISA KEV alerts, vendor advisories, malware feeds, threat actor intelligence, and dark web exposure into a single searchable feed. It includes a full FedRAMP 20x compliance suite — KSI validation, OSCAL document generation, scanner/SIEM integrations, and an automated audit log — plus a local AI analyst powered by Ollama. No SaaS subscriptions, no telemetry, no data sent externally.
+
+---
+
+## Contents
+
+- [Prerequisites](#prerequisites)
+- [Quickstart — Local Dev](#quickstart--local-dev)
+- [Production Deployment](#production-deployment)
+- [Authentication](#authentication)
+- [Feeds Ingested](#feeds-ingested)
+- [Pages](#pages)
+- [REST API Reference](#rest-api-reference)
+- [Environment Variables](#environment-variables)
+- [Architecture](#architecture)
+- [Adding a New Feed](#adding-a-new-feed)
+- [License](#license)
 
 ---
 
 ## Prerequisites
 
-| Tool | Version | Download |
-|------|---------|----------|
-| Python | 3.12+ | [python.org](https://www.python.org/downloads/) |
+| Tool | Version | Notes |
+|------|---------|-------|
+| Python | 3.13+ | Check "Add Python to PATH" on Windows |
 | Git | any | [git-scm.com](https://git-scm.com/downloads) |
-| Ollama | latest | [ollama.com](https://ollama.com/download) |
-
-> **Windows users:** During Python install, check **"Add Python to PATH"**.
+| Ollama | latest | [ollama.com](https://ollama.com/download) — optional, enables AI analyst |
 
 ---
 
-## Quickstart
+## Quickstart — Local Dev
 
-```bat
-:: 1. Clone
-git clone https://github.com/zacharyloganhill/threatpulse.git phantomfeed
-cd phantomfeed
+```bash
+# 1. Clone
+git clone https://github.com/zacharyloganhill/PhantomFeed.git threatpulse
+cd threatpulse
 
-:: 2. Create and activate virtual environment
+# 2. Virtual environment
 python -m venv .venv
-.venv\Scripts\activate
+source .venv/bin/activate       # Windows: .venv\Scripts\activate
 
-:: 3. Install dependencies
+# 3. Install dependencies
 pip install -r requirements.txt
 
-:: 4. Configure
-copy .env.example .env
+# 4. Configure
+cp .env.example .env
+# Edit .env — at minimum set SECRET_KEY and ADMIN_PASSWORD
 
-:: 5. Pull an Ollama model (runs locally, one-time download ~2 GB)
+# 5. (Optional) Pull an Ollama model for the AI analyst
 ollama pull llama3.2
 
-:: 6. Start PhantomFeed
+# 6. Start
 python main.py
 ```
 
-Then open **http://localhost:8000/dashboard.html** in your browser.
+Open **http://localhost:8000** in your browser. Login with the credentials you set in `.env` (default username: `admin`).
 
-On first run, all feeds are polled immediately. The statusbar shows **● CONNECTED** when the API is live and **● AI: llama3.2** when Ollama is detected.
+On first run, all feeds are polled immediately. The dashboard statusbar shows **● CONNECTED** when the API is live and **● AI: llama3.2** when Ollama is detected.
 
-> **Optional:** Add API keys to `.env` for higher rate limits (see [Environment Variables](#environment-variables)).
+### Generate strong secrets
+
+```bash
+python scripts/generate-secrets.py
+```
+
+Prints a ready-to-paste `.env` block with a cryptographically strong `SECRET_KEY`, `ADMIN_PASSWORD`, and `PHANTOMFEED_ENCRYPTION_KEY`.
+
+---
+
+## Production Deployment
+
+### Docker Compose
+
+```bash
+# Generate secrets first
+python scripts/generate-secrets.py >> .env
+
+# Edit nginx/certs/ — add your TLS cert and key (or use self-signed for testing)
+# See nginx/nginx.conf for the expected filenames
+
+docker compose up -d
+```
+
+The compose stack runs:
+- **app** — FastAPI on `127.0.0.1:8000` (not exposed directly)
+- **nginx** — HTTPS on port 443, HTTP→HTTPS redirect on 80, rate limiting at 60 req/min per IP
+
+The SQLite database and upload temp files are stored in named Docker volumes (`db_data`, `uploads`).
+
+> **SQLite constraint:** The app runs with `--workers 1`. SQLite's write locking is not safe under concurrent multi-process access. If you need horizontal scaling, migrate to PostgreSQL.
+
+### systemd (bare metal)
+
+```bash
+# Copy service file
+sudo cp deploy/threatpulse.service /etc/systemd/system/
+# Edit WorkingDirectory and EnvironmentFile paths in the unit file
+sudo systemctl daemon-reload
+sudo systemctl enable --now threatpulse
+```
+
+The unit runs as a non-root user with kernel-level hardening (`NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=strict`, empty `CapabilityBoundingSet`).
+
+### Health check
+
+```
+GET /health
+```
+
+Unauthenticated liveness + readiness probe. Returns `200 {"status":"ok","db":"ok"}` or `503 {"status":"degraded","db":"error"}`. Used by the Docker `HEALTHCHECK` and nginx upstream health checks.
+
+---
+
+## Authentication
+
+Every API endpoint (except `GET /health`) requires a JWT bearer token.
+
+### Login
+
+```bash
+curl -s -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"your-password"}' | jq .
+```
+
+```json
+{
+  "access_token": "eyJ...",
+  "token_type": "bearer",
+  "role": "admin"
+}
+```
+
+Include the token in every request:
+```bash
+curl http://localhost:8000/api/v1/stats \
+  -H "Authorization: Bearer eyJ..."
+```
+
+### Auth endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/auth/login` | Issue JWT — returns `access_token`, `role` |
+| POST | `/auth/logout` | Revoke current token immediately |
+| GET | `/auth/me` | Current user info (`username`, `role`, `client_id`) |
+
+### Roles
+
+| Role | Access |
+|------|--------|
+| `admin` | Full access — all clients, all admin operations, refresh, purge |
+| `analyst` | Read access to threat feed, stats, notifications. Write access to their own read-state. No admin operations |
+| `client` | Scoped to their assigned `client_id` — sees only their own KSI, findings, remediation |
+
+### Session limits
+
+Each user account supports a maximum of **5 concurrent sessions**. A sixth login returns `429 Too Many Requests`. Logging out frees a slot immediately. Tokens are revoked server-side on logout and remain invalid even if the JWT has not expired.
 
 ---
 
@@ -58,525 +171,38 @@ On first run, all feeds are polled immediately. The statusbar shows **● CONNEC
 
 ### Vulnerability Intelligence
 
-| Feed | Source | Interval | Notes |
-|------|--------|----------|-------|
-| NVD CVE API v2 | nvd.nist.gov | 15 min | Full CVSS, CPE, CWE metadata |
-| CISA KEV | cisa.gov | 15 min | Actively exploited CVEs only |
-| CISA Cyber Advisories | github.com/cisagov | 60 min | CSAF/IT — joint advisories, BODs |
-| CISA ICS Advisories | github.com/cisagov | 60 min | CSAF/OT — SCADA, ICS, OT systems |
+| Feed | Source | Interval |
+|------|--------|----------|
+| NVD CVE API v2 | nvd.nist.gov | 15 min |
+| CISA KEV | cisa.gov | 15 min |
+| CISA IT Advisories | github.com/cisagov | 60 min |
+| CISA ICS/OT Advisories | github.com/cisagov | 60 min |
 
 ### Vendor Security Advisories
 
-| Feed | Vendor | Source |
-|------|--------|--------|
-| Microsoft MSRC | Microsoft | msrc.microsoft.com |
-| Cisco Security | Cisco | sec.cloudapps.cisco.com |
-| Fortinet PSIRT | Fortinet | fortiguard.com |
-| Palo Alto Networks | Palo Alto | security.paloaltonetworks.com |
-| Red Hat Security | Red Hat | access.redhat.com |
-| Ubuntu Security | Canonical | ubuntu.com |
+| Vendor | Source |
+|--------|--------|
+| Microsoft MSRC | msrc.microsoft.com |
+| Cisco | sec.cloudapps.cisco.com |
+| Fortinet PSIRT | fortiguard.com |
+| Palo Alto Networks | security.paloaltonetworks.com |
+| Red Hat | access.redhat.com |
+| Ubuntu / Canonical | ubuntu.com |
 
 ### Threat Intelligence & Malware
 
-| Feed | Source | Notes |
-|------|--------|-------|
-| abuse.ch URLhaus | urlhaus-api.abuse.ch | Live malware URLs and C2 infrastructure |
-| abuse.ch Feodo Tracker | feodotracker.abuse.ch | Botnet C2 IP blocklist |
-| AlienVault OTX | otx.alienvault.com | Threat pulses (free API key required) |
+| Feed | Source |
+|------|--------|
+| abuse.ch URLhaus | urlhaus-api.abuse.ch |
+| abuse.ch Feodo Tracker | feodotracker.abuse.ch |
+| AlienVault OTX | otx.alienvault.com |
 
 ### Supply Chain
 
-| Feed | Source | Notes |
-|------|--------|-------|
-| GitHub Advisory (npm) | github.com/advisories | Node.js package vulnerabilities |
-| GitHub Advisory (PyPI) | github.com/advisories | Python package vulnerabilities |
-
----
-
-## REST API
-
-Base URL: `http://localhost:8000/api/v1`
-Interactive docs: `http://localhost:8000/docs`
-
-### Endpoints
-
-```
-GET    /items                  List items — filterable, searchable, paginated
-GET    /items/{id}             Get a single item by ID
-POST   /items/{id}/read        Mark item as read
-POST   /items/read-all         Mark all items as read
-GET    /stats                  Counts by severity, feed, and new/total
-GET    /feeds                  List all registered feed IDs
-POST   /refresh                Trigger immediate poll of all feeds
-POST   /refresh/{feed_id}      Trigger poll of one specific feed
-DELETE /items/purge            Delete items older than retention period
-```
-
-### Ollama Proxy
-
-```
-GET|POST  /api/ollama/{path}   Proxies to http://localhost:11434/{path}
-```
-
-Eliminates CORS issues between the dashboard and Ollama. The proxy streams responses so chat completions render token-by-token.
-
-### Query Parameters for `GET /items`
-
-| Param | Example | Description |
-|-------|---------|-------------|
-| `severity` | `CRITICAL,HIGH` | Comma-separated severity filter |
-| `category` | `cve` | `cve` · `kev` · `advisory` · `vendor` · `ics` · `threat` · `malware` · `supply` |
-| `feed_id` | `nvd` | Filter to a single source |
-| `is_new` | `true` | Unread items only |
-| `search` | `ivanti` | Full-text search: title, description, vendor, tags |
-| `limit` | `50` | Page size (max 500) |
-| `offset` | `0` | Pagination offset |
-
-### Example curl Commands
-
-```bash
-# New critical and high items
-curl "http://localhost:8000/api/v1/items?severity=CRITICAL,HIGH&is_new=true"
-
-# Search for Ivanti
-curl "http://localhost:8000/api/v1/items?search=ivanti"
-
-# All ICS/OT advisories
-curl "http://localhost:8000/api/v1/items?category=ics"
-
-# CISA KEV only
-curl "http://localhost:8000/api/v1/items?feed_id=cisa_kev"
-
-# Force an immediate refresh of all feeds
-curl -X POST "http://localhost:8000/api/v1/refresh"
-
-# Stats
-curl "http://localhost:8000/api/v1/stats"
-
-# Check available Ollama models via proxy
-curl "http://localhost:8000/api/ollama/api/tags"
-```
-
----
-
-## Phase 2 Features
-
-### Asset Inventory & Exposure Matching
-
-Upload a CSV of client assets — PhantomFeed automatically matches incoming threat items to affected software using CPE strings, vendor/product tokens, and keyword matching:
-
-```
-POST /api/v1/admin/clients/{id}/assets/import    CSV upload
-GET  /api/v1/admin/clients/{id}/assets           List all assets
-GET  /api/v1/items?client_id={id}&exposed_only=true  Only matched items
-```
-
-**CSV format** (columns: `hostname`, `ip_address`, `os`, `os_version`, `software`, `version`, `cpe_string`, `asset_type`):
-```csv
-hostname,ip_address,os,os_version,software,version
-srv01,10.0.0.1,Windows,2019,Microsoft Windows Server,2019
-web01,10.0.0.2,Linux,Ubuntu 22.04,Apache HTTP Server,2.4.58
-```
-
-Confidence tiers: **1.0** exact CPE · **0.85** CPE prefix · **0.8** vendor+product · **0.7** vendor keyword · **0.5** vendor-only.
-
-### TAXII 2.1 / STIX Ingestion
-
-Polls TAXII 2.1 servers for STIX bundles. Incremental polling via stored `added_after` timestamps.
-
-Pre-configured sources:
-- **CISA AIS** — `https://ais2.cisa.dhs.gov/taxii2/` (requires cert — [register at cisa.gov/ais](https://www.cisa.gov/ais))
-- **CIRCL MISP** — public OSINT feed
-- **AlienVault OTX TAXII** — uses `OTX_API_KEY` as credential
-
-Add `TAXII_USERNAME`, `TAXII_PASSWORD`, `TAXII_CERT_PATH` to `.env`. Fetchers skip gracefully when credentials missing.
-
-```
-GET  /api/v1/taxii/sources          List configured servers and connection status
-POST /api/v1/taxii/test/{feed_id}   Test connection to a TAXII feed
-```
-
-### Remediation SLA Tracking
-
-Track vulnerability remediation with per-client SLA deadlines:
-
-| Severity | Default SLA |
-|----------|-------------|
-| CRITICAL | 15 days     |
-| HIGH     | 30 days     |
-| MEDIUM   | 90 days     |
-| LOW      | 180 days    |
-
-Override per client in `stack_profile`:
-```json
-{"sla": {"CRITICAL": 7, "HIGH": 14}}
-```
-
-```
-GET    /api/v1/clients/{id}/remediation        List remediation items + days remaining
-POST   /api/v1/clients/{id}/remediation        Create remediation item
-PATCH  /api/v1/clients/{id}/remediation/{rid}  Update status (open/in_progress/patched/accepted_risk/false_positive/wont_fix)
-GET    /api/v1/clients/{id}/metrics            MTTR, SLA compliance rate, open/overdue counts
-```
-
-SLA overdue check runs daily at 07:00 UTC.
-
-### Analytics Dashboard
-
-Visit **http://localhost:8000/analytics.html** for the executive analytics view:
-
-- **Threat volume trend** — 90-day line chart by severity (CRITICAL/HIGH/MEDIUM)
-- **Severity distribution** — doughnut chart
-- **Top vendors** — horizontal bar chart by risk volume
-- **Category breakdown** — stacked bar by category + severity
-- **Remediation MTTR trend** — avg days to patch over time
-- **Top risk items** — ranked by composite risk score
-
-Client selector dropdown switches all charts to a specific client's view. Date range: 30 / 60 / 90 days.
-
-### IOC Enrichment Engine
-
-Automatically enriches IPs, domains, URLs, and file hashes from malware/threat feeds. Cached for 24 hours.
-
-```
-GET /api/v1/ioc/lookup?value=8.8.8.8      Live enrichment (IP/hash/domain/URL)
-GET /api/v1/ioc/cache                      Recent cache entries
-```
-
-IOC Lookup widget is also built into the dashboard detail pane — type any value in the Quick Actions section.
-
-| API Key | Source | Enriches |
-|---------|--------|---------|
-| `ABUSEIPDB_API_KEY` | [abuseipdb.com](https://www.abuseipdb.com) | IP reputation score + country |
-| `GREYNOISE_API_KEY` | [greynoise.io](https://www.greynoise.io) | IP classification (benign/malicious/unknown) |
-| `VIRUSTOTAL_API_KEY` | [virustotal.com](https://www.virustotal.com) | Hash/domain/URL detection ratio |
-
-### SIEM Webhook Push
-
-Configure webhooks per client to push new threat items to your SIEM or alerting platform:
-
-```
-POST   /api/v1/admin/clients/{id}/webhooks           Create webhook
-GET    /api/v1/admin/clients/{id}/webhooks            List webhooks  
-PUT    /api/v1/admin/clients/{id}/webhooks/{wid}      Update
-DELETE /api/v1/admin/clients/{id}/webhooks/{wid}      Delete
-POST   /api/v1/admin/clients/{id}/webhooks/{wid}/test Send test payload
-```
-
-**Supported types:**
-
-| Type | Format | Auth |
-|------|--------|------|
-| `generic` | Plain JSON body | — |
-| `slack` | Block Kit attachment with severity color | Webhook URL |
-| `splunk_hec` | `{time, sourcetype:"phantomfeed:threat", event:{...}}` | `Authorization: Splunk {token}` |
-| `sentinel` | Azure Monitor Log Analytics, HMAC-SHA256 signed | `{workspace_id}:{workspace_key}` in secret |
-
-**Example — Slack webhook:**
-```bash
-curl -X POST http://localhost:8000/api/v1/admin/clients/{id}/webhooks \
-  -H "Authorization: Bearer {token}" \
-  -H "Content-Type: application/json" \
-  -d '{"webhook_type":"slack","url":"https://hooks.slack.com/T.../...","min_severity":"HIGH"}'
-```
-
-**Example — Splunk HEC:**
-```bash
-curl -X POST http://localhost:8000/api/v1/admin/clients/{id}/webhooks \
-  -H "Authorization: Bearer {token}" \
-  -H "Content-Type: application/json" \
-  -d '{"webhook_type":"splunk_hec","url":"https://splunk:8088/services/collector","secret":"your-hec-token","min_severity":"CRITICAL"}'
-```
-
----
-
-## Upload & Export Center
-
-Visit **http://localhost:8000/upload.html** for the full Upload & Export center.
-
-### Supported Upload Formats
-
-| Format | Extension | Parser |
-|--------|-----------|--------|
-| Nessus scan | `.nessus` | Auto-detected; extracts assets + findings per host |
-| Qualys XML | `.xml` | `<HOST>` and `<VULN>` elements |
-| Qualys CSV | `.csv` | QID, Title, Severity, CVE ID columns |
-| OpenVAS XML | `.xml` | `<report>` root, `<result>` with `<nvt>` children |
-| Rapid7/InsightVM CSV | `.csv` | Asset IP Address, Vulnerability Title, Severity columns |
-| Generic CSV/XLSX | `.csv`, `.xlsx` | Fuzzy column mapping (auto-detects hostname/IP/severity/CVE columns) |
-| IOC list (plain text) | `.txt` | One IOC per line; auto-detects IPs, hashes, domains, URLs |
-| IOC list (JSON) | `.json` | Array of `{type, value}` or STIX 2.1 Indicator patterns |
-| STIX 2.1 bundle | `.json` | Full bundle; imports Indicator, Malware, Threat-Actor, Vulnerability objects |
-| Bulk clients | `.csv` | Columns: name, industry, contact_email, min_severity, vendors, products |
-
-Download templates: `GET /api/v1/upload/templates/{assets|clients|iocs}`
-
-### Upload API
-
-```
-POST /api/v1/upload/scan                  Auto-detect and preview scan file
-POST /api/v1/upload/scan/{id}/confirm     Confirm and import (with optional field mapping)
-POST /api/v1/upload/assets                Preview asset CSV/XLSX
-POST /api/v1/upload/assets/{id}/confirm   Confirm asset import
-POST /api/v1/upload/iocs                  Import IOC list (enrichment triggered in background)
-POST /api/v1/upload/stix                  Import STIX 2.1 bundle directly
-POST /api/v1/upload/clients               Bulk client preview
-POST /api/v1/upload/clients/{id}/confirm  Confirm bulk client import
-GET  /api/v1/upload/history               Upload log (filter by client_id)
-GET  /api/v1/upload/templates/{type}      Download CSV template
-```
-
-### Export API
-
-```
-GET /api/v1/export/items.csv             Threat items as CSV (severity, category, search, days filters)
-GET /api/v1/export/items.json            Threat items as JSON
-GET /api/v1/export/iocs.txt?days=7       IOC plain text list
-GET /api/v1/export/iocs.csv?days=7       IOC list as CSV with enrichment data
-GET /api/v1/export/iocs.stix?days=7      IOC list as STIX 2.1 Bundle JSON
-GET /api/v1/clients/{id}/export/remediation.csv   Remediation tracker CSV
-GET /api/v1/clients/{id}/export/remediation.xlsx  Remediation tracker XLSX (color-coded)
-GET /api/v1/clients/{id}/export/detection-rules.zip  SPL + KQL + Sigma ZIP
-POST /api/v1/clients/{id}/export/push-rules-github   Push rules to GitHub repo
-GET /api/v1/clients/{id}/report.html?days=30  HTML report preview with Download PDF button
-```
-
-**Detection Rules ZIP** contains:
-- `splunk/` — Splunk SPL searches per CRITICAL/HIGH item
-- `sentinel/` — Microsoft Sentinel KQL queries
-- `sigma/` — Sigma YAML rules (convert with sigmac or pySigma)
-
----
-
-## Quick Actions (AI Analyst)
-
-Each item in the dashboard has four **Quick Actions** that send a pre-built prompt to your local Ollama model:
-
-| Action | What it produces |
-|--------|-----------------|
-| **Draft Client Advisory** | Non-technical advisory email ready to send to affected clients |
-| **Generate Detection Rules** | Splunk SPL, Microsoft Sentinel KQL, and a Sigma rule |
-| **Get IOCs & Hunting Queries** | File hashes, IPs, domains, registry keys, YARA snippets |
-| **Analyze Client Impact** | Exposure assessment questions and at-risk asset types |
-
-Responses stream in real-time in the AI panel. Everything runs locally via Ollama — **zero cost, zero data sent externally.**
-
----
-
-## Architecture
-
-```
-phantomfeed/
-├── main.py                  # FastAPI app, lifespan, CORS, Ollama proxy, static files
-├── config.py                # Feed URLs, API keys, severity mappings, settings
-├── dashboard.html           # Dark-mode web dashboard (served at /dashboard.html)
-├── .env                     # Your local secrets — never commit this
-├── .env.example             # Template — copy to .env to get started
-├── requirements.txt
-│
-├── db/
-│   └── database.py          # Async SQLite: connect, CRUD, deduplication
-│
-├── ingest/
-│   ├── base.py              # BaseFetcher: HTTP helpers, retries, normalization
-│   ├── nvd.py               # NVD CVE API v2
-│   ├── cisa.py              # CISA KEV + CSAF advisories (IT + OT)
-│   ├── rss_feeds.py         # Generic vendor RSS ingestion
-│   ├── threat_intel.py      # abuse.ch, OTX, supply chain
-│   └── scheduler.py         # APScheduler: per-feed poll intervals
-│
-└── api/
-    └── routes.py            # All REST endpoints
-```
-
-### Adding a New Feed
-
-1. Create a class in `ingest/` that inherits `BaseFetcher`
-2. Set `feed_id`, `feed_label`, `category`, and `poll_interval`
-3. Implement `async def fetch(self) -> list[dict]`
-4. Register it in `ingest/scheduler.py` → `_build_fetchers()`
-
-For simple RSS sources, just add an entry to `VENDOR_RSS_FEEDS` in `config.py` — no code required.
-
----
-
-## Environment Variables
-
-Copy `.env.example` to `.env` and set values as needed. All variables are optional except the server defaults.
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `NVD_API_KEY` | *(empty)* | NVD API key — [get one free](https://nvd.nist.gov/developers/request-an-api-key). Raises rate limit from 5 to 50 req/30s |
-| `OTX_API_KEY` | *(empty)* | AlienVault OTX key — [get one free](https://otx.alienvault.com). Required for OTX pulses |
-| `URLHAUS_API_KEY` | *(empty)* | abuse.ch key — [get one free](https://auth.abuse.ch/). Increases URLhaus access |
-| `POLL_INTERVAL_FAST` | `15` | Polling interval for high-priority feeds (minutes) |
-| `POLL_INTERVAL_SLOW` | `60` | Polling interval for vendor/intel feeds (minutes) |
-| `HOST` | `127.0.0.1` | API bind address |
-| `PORT` | `8000` | API port |
-| `DB_PATH` | `./phantomfeed.db` | SQLite database file path |
-| `RETENTION_DAYS` | `90` | Days of history to retain before purge |
-| `NVD_PAGE_SIZE` | `200` | CVEs fetched per NVD API page (max 2000) |
-
----
-
-## Phase 3 — Market Differentiators
-
-### Dark Web & Paste Site Monitoring
-
-Monitors dark web data breach sources for client name mentions:
-
-| Monitor | Source | Notes |
-|---------|--------|-------|
-| RansomWatch | github.com/joshhighet/ransomwatch | Ransomware group victim posts — fuzzy name matching |
-| Pastebin Scraper | scrape.pastebin.com | Requires Pastebin Pro account |
-| GitHub Gists | api.github.com/gists/public | Public gist leak detection |
-| HIBP Domain Breach | haveibeenpwned.com | Domain breach lookup (API key required) |
-
-```
-GET  /api/v1/clients/{id}/darkweb-alerts                    List alerts (unacknowledged_only filter)
-POST /api/v1/clients/{id}/darkweb-alerts/{alert_id}/acknowledge
-POST /api/v1/clients/{id}/darkweb-scan                      Trigger immediate scan
-GET  /api/v1/notifications                                  Aggregated notification center
-```
-
-Dark web alerts appear in the client dashboard notification center and Dark Web tab.
-
-### Threat Actor Dossier Database
-
-55 tracked threat actors with MITRE ATT&CK alignment:
-
-- APT1, APT10, APT28, APT29, APT32, APT34, APT38, APT40, APT41
-- Lazarus Group, Sandworm, Volt Typhoon, Scattered Spider, BlackCat, LockBit, Cl0p, and more
-
-Each actor dossier includes: origin, sponsor, motivation, TTPs (MITRE IDs), known malware, target industries, recent activity.
-
-Open **http://localhost:8000/actors.html** to browse the full dossier browser.
-
-```
-GET /api/v1/actors                              List all actors (filterable by origin/motivation)
-GET /api/v1/actors/{id}                         Full dossier
-GET /api/v1/actors/{id}/items                   Threat items linked to this actor
-GET /api/v1/clients/{id}/actor-alerts           Actors targeting client's industry
-```
-
-### MISP Integration
-
-Pull and push threat events from/to a MISP instance:
-
-```env
-MISP_URL=https://your-misp-instance
-MISP_API_KEY=your_api_key
-MISP_VERIFY_SSL=true
-```
-
-```
-GET  /api/v1/misp/status          Connection status
-POST /api/v1/misp/sync            Trigger MISP event pull (background)
-GET  /api/v1/misp/events          Recently pulled MISP events
-POST /api/v1/misp/push/{item_id}  Push a PhantomFeed item to MISP
-```
-
-### Automated Executive Briefing Deck
-
-Generate a 12-slide PowerPoint briefing deck with AI-written summaries and matplotlib charts.
-
-```
-GET /api/v1/clients/{id}/deck.pptx?days=30     Download PPTX (supports ?token= for window.open)
-GET /api/v1/clients/{id}/deck-preview           JSON slide outline for preview
-```
-
-Slides: Title → Executive Summary (Ollama AI) → Threat Landscape → Top 5 Threats → CISA KEV → Threat Actors → Vendor Risk Bar Chart → Compliance Impact → Asset Exposure → Remediation Donut Chart → Recommended Actions (AI) → Contact
-
-Requires: `pip install python-pptx matplotlib Pillow` (included in requirements.txt)
-
-### Peer Benchmarking Engine
-
-Calculate a 0–100 posture score and industry percentile ranking:
-
-| Component | Weight | Metric |
-|-----------|--------|--------|
-| SLA Compliance | 30 pts | % remediations closed before SLA deadline |
-| MTTR | 30 pts | Mean time to remediate vs industry median |
-| Open Criticals | 20 pts | Inverted count of open CRITICAL items |
-| Patch Velocity | 20 pts | Items patched in last 30 days / total open |
-
-Industry baselines for 9 sectors: Technology, Finance, Healthcare, Government, Retail, Energy, Education, Manufacturing, Legal.
-
-```
-GET /api/v1/clients/{id}/posture            Current score, grade, percentile, component breakdown
-GET /api/v1/clients/{id}/posture/history    Historical score snapshots
-GET /api/v1/benchmarks/{industry}           Industry baseline statistics
-GET /api/v1/benchmarks                      All clients ranked by score
-```
-
-### CMMC 2.0 Dynamic Gap Assessment
-
-All 110 NIST SP 800-171 Rev 2 / CMMC Level 2 practices across 14 domains.
-
-Open **http://localhost:8000/cmmc.html** for the full interactive gap assessment UI.
-
-- Auto-derived status from active threat intelligence (compliance_tags mapping)
-- Manual override per practice with notes
-- Bulk update and CSV export
-- Domain-level scoring and overall compliance percentage
-
-```
-GET    /api/v1/clients/{id}/cmmc/assessment
-PATCH  /api/v1/clients/{id}/cmmc/practices/{practice_id}
-POST   /api/v1/clients/{id}/cmmc/bulk-update
-GET    /api/v1/cmmc/practices?domain=Access+Control
-```
-
-### Tabletop Exercise Generator
-
-AI-powered tabletop exercises with 8 scenario types:
-
-`ransomware` · `supply_chain` · `data_breach` · `insider_threat` · `ddos` · `phishing` · `zero_day` · `cloud_breach`
-
-Each exercise includes: scenario overview, 5 exercise objectives, per-phase situation+inject+discussion questions+expected actions, debrief questions. Exports to PDF (reportlab) and PPTX (python-pptx).
-
-```
-GET  /api/v1/clients/{id}/tabletops
-POST /api/v1/clients/{id}/tabletops/generate    {scenario_type, custom_prompt}
-GET  /api/v1/clients/{id}/tabletops/{id}/export.pdf
-GET  /api/v1/clients/{id}/tabletops/{id}/export.pptx
-GET  /api/v1/tabletop/scenario-types
-```
-
-### Supply Chain Risk Graph
-
-Track vendor software exposure with a D3.js force-directed risk graph.
-
-Open **http://localhost:8000/supplychain.html** for the interactive graph view.
-
-```
-GET    /api/v1/clients/{id}/vendors                List vendors with risk levels
-POST   /api/v1/clients/{id}/vendors                Add vendor {vendor_name, products, criticality}
-DELETE /api/v1/clients/{id}/vendors/{vendor_id}    Remove vendor
-POST   /api/v1/clients/{id}/vendors/scan           Trigger background risk scoring
-GET    /api/v1/clients/{id}/supply-chain-graph     D3.js {nodes, links} graph data
-```
-
-Vendors are risk-scored by scanning the threat feed for name/product matches. Red = high risk, amber = medium, green = low.
-
-### Breach Cost & ROI Calculator
-
-Expected financial loss per threat item using IBM Cost of a Data Breach Report 2024 models:
-
-| Industry | Average Breach Cost |
-|----------|---------------------|
-| Healthcare | $9.77M |
-| Finance | $6.08M |
-| Technology | $5.10M |
-| Energy | $4.72M |
-| Manufacturing | $4.20M |
-
-```
-GET /api/v1/clients/{id}/risk-portfolio     Full portfolio: total exposure, patched vs unpatched, ROI ratios, top 20 items
-GET /api/v1/breach-cost/industries          IBM 2024 baseline by industry
-```
-
-Risk Portfolio is displayed in the client dashboard's Risk Portfolio tab with `$` exposure amounts and patch ROI ratios.
+| Feed | Source |
+|------|--------|
+| GitHub Advisory (npm) | github.com/advisories |
+| GitHub Advisory (PyPI) | github.com/advisories |
 
 ---
 
@@ -584,104 +210,412 @@ Risk Portfolio is displayed in the client dashboard's Risk Portfolio tab with `$
 
 | URL | Description |
 |-----|-------------|
-| `/dashboard.html` | Main threat feed — real-time, filterable, AI analyst |
-| `/analytics.html` | Charts: trend, vendor, category, MTTR, heatmap |
-| `/actors.html` | Threat actor dossier browser with ATT&CK heatmap |
+| `/` | Mission Control — stats, platform status, recent alerts |
+| `/dashboard.html` | Threat feed — real-time, filterable, AI analyst, IOC enrichment |
+| `/analytics.html` | Charts: 90-day trend, severity distribution, vendor risk, MTTR |
+| `/actors.html` | Threat actor dossier browser (55+ APTs with ATT&CK heatmap) |
 | `/cmmc.html` | CMMC 2.0 gap assessment — 110 practices, 14 domains |
 | `/supplychain.html` | Supply chain risk graph (D3.js force-directed) |
-| `/upload.html` | Scan upload center and export tools |
-| `/admin.html` | Client management, assets, users, exports |
-| `/client_dashboard.html?client_id={id}` | Per-client portal with all Phase 3 features |
-| `/fedramp.html` | FedRAMP 20x compliance dashboard (KSI, OSCAL, scanners, SIEMs) |
+| `/darkweb.html` | Dark web exposure monitoring and alert acknowledgement |
+| `/upload.html` | Scan upload center, IOC import, bulk operations, exports |
+| `/integrations.html` | Scanner and SIEM wizard — setup, field mapping, pull history |
+| `/fedramp.html` | FedRAMP 20x dashboard — KSI, OSCAL, scanners, SIEMs, audit log |
+| `/admin.html` | Client management, user accounts, assets, webhooks *(admin only)* |
+| `/login.html` | Login |
 
 ---
 
-## FedRAMP 20x Compliance Features
+## REST API Reference
 
-PhantomFeed includes a full FedRAMP 20x continuous monitoring capability suite.
+Base URL: `http://localhost:8000/api/v1`  
+Interactive docs (requires auth): `http://localhost:8000/docs`
 
-### Section 1 — Automated Scanner Pulls
+All requests require `Authorization: Bearer <token>` unless noted.
 
-| Scanner | Auth Method | Notes |
-|---------|-------------|-------|
-| Tenable.io | `X-ApiKeys` header (accessKey + secretKey) | Export API + workbench fallback |
-| Tenable.sc | Session token (`/rest/token`) | On-prem; set `extra_config.mode=sc` |
-| Rapid7 InsightVM | HTTP Basic auth | Paginated asset + vuln endpoints |
-| Qualys VMDR | Basic auth + `X-Requested-With` | XML detection API |
-| CrowdStrike Spotlight | OAuth2 client_credentials | Two-phase query + detail fetch |
-
-All credentials are **Fernet-encrypted** at rest. Set `PHANTOMFEED_ENCRYPTION_KEY` in `.env`:
+### Threat Feed
 
 ```
-PHANTOMFEED_ENCRYPTION_KEY=<base64-url-safe-32-byte-key>
-# Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+GET    /items                      List items — filterable, searchable, paginated
+GET    /items/{id}                 Single item by ID
+POST   /items/{id}/read            Mark item read (per-user — does not affect other users)
+POST   /items/read-all             Mark all items read for current user
+GET    /stats                      Counts by severity, feed, new/total
+GET    /feeds                      List all registered feed IDs
+POST   /refresh                    Trigger immediate poll of all feeds (admin)
+POST   /refresh/{feed_id}          Trigger poll of one feed (admin)
+DELETE /items/purge                Delete items older than retention period (admin)
 ```
 
-Scanner API endpoints (prefix: `/api/v1/clients/{id}/`):
+#### `GET /items` query parameters
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `scanners` | List scanner configs (credentials masked) |
-| POST | `scanners` | Add scanner config |
-| PATCH | `scanners/{scanner_id}` | Update config |
-| DELETE | `scanners/{scanner_id}` | Delete scanner + findings |
-| POST | `scanners/{scanner_id}/poll` | Trigger immediate poll |
-| GET | `scan-findings` | List findings (filterable by severity, scanner) |
-| GET | `scan-findings/summary` | Severity counts + scanner status |
+| Param | Example | Description |
+|-------|---------|-------------|
+| `severity` | `CRITICAL,HIGH` | Comma-separated severity filter |
+| `category` | `cve` | `cve` · `kev` · `advisory` · `vendor` · `ics` · `threat` · `malware` · `supply` |
+| `feed_id` | `nvd` | Filter to a single source |
+| `is_new` | `true` | Unread items only (per calling user) |
+| `search` | `ivanti` | Full-text search: title, description, vendor, tags (max 200 chars) |
+| `limit` | `50` | Page size (max 500) |
+| `offset` | `0` | Pagination offset |
+| `client_id` | `abc123` | Filter to assets matching a client's stack |
+| `exposed_only` | `true` | Only items matching client asset CPEs |
 
-### Section 2 — SIEM Integrations
+### IOC Enrichment
 
-| SIEM | Auth Method | Notes |
-|------|-------------|-------|
-| Splunk | Session key (`/services/auth/login`) | Saved-search job polling |
-| Microsoft Sentinel | Azure AD client_credentials OAuth2 | Log Analytics KQL query |
-| IBM QRadar | `SEC` token header | Offenses API with pagination |
-| Elastic Security | `ApiKey` header | Detection signals + fallback alerts API |
+```
+GET  /ioc/lookup?value=8.8.8.8    Enrich IP, hash, domain, or URL (24-hour cache)
+GET  /ioc/cache?limit=20          Recent enrichment cache entries
+```
 
-SIEM endpoints: same pattern as scanners at `/api/v1/clients/{id}/siems/...`
+### Analytics
 
-### Section 3 — OSCAL Output Engine
+```
+GET  /analytics/trend?days=90             Severity volumes by day
+GET  /analytics/vendor-risk               Top vendors by threat count
+GET  /analytics/category-breakdown        Items by category × severity
+GET  /analytics/remediation-mttr          Mean time to remediate trend
+GET  /clients/{id}/posture                Risk posture score + industry percentile
+GET  /clients/{id}/posture/history        Historical score snapshots
+GET  /benchmarks/{industry}               Industry baseline statistics
+GET  /benchmarks                          All clients ranked
+```
 
-| Document | Format | Description |
-|----------|--------|-------------|
-| POA&M | XML | Open remediation items as OSCAL plan-of-action-and-milestones |
-| SAR | XML | Scan findings as OSCAL assessment-results |
-| VDR | JSON | CVE-tagged vulnerabilities with asset mapping |
-| OAR | JSON | Posture score, authorization decision, CM activity log |
-| SSP (partial) | XML | System characteristics + 8 control implementation stubs |
-| Bundle | ZIP | All 5 documents in one download |
+### Remediation
 
-OSCAL endpoints: `GET /api/v1/clients/{id}/oscal/{type}.{ext}` and `/oscal/bundle.zip`
+```
+GET    /clients/{id}/remediation                     List items + SLA status
+POST   /clients/{id}/remediation                     Create item
+PATCH  /clients/{id}/remediation/{rid}               Update status
+GET    /clients/{id}/metrics                         MTTR, SLA compliance, overdue counts
+```
 
-### Section 4 — KSI Validation Engine
+Statuses: `open` · `in_progress` · `patched` · `accepted_risk` · `false_positive` · `wont_fix`
 
-Seven Key Security Indicators validated automatically every 6 hours:
+### Dark Web Monitoring
 
-| KSI | Category | Pass Threshold |
+```
+GET  /clients/{id}/darkweb-alerts                       List alerts
+POST /clients/{id}/darkweb-alerts/{alert_id}/acknowledge
+POST /clients/{id}/darkweb-scan                         Trigger immediate scan
+GET  /notifications                                     Aggregated notification center
+```
+
+### TAXII 2.1
+
+```
+GET  /taxii/sources              List configured TAXII servers + status
+POST /taxii/test/{feed_id}       Test connection
+```
+
+### Threat Actors
+
+```
+GET  /actors                      List all actors (filter: origin, motivation)
+GET  /actors/{id}                 Full dossier
+GET  /actors/{id}/items           Threat items linked to this actor
+GET  /clients/{id}/actor-alerts   Actors targeting client's industry
+```
+
+### FedRAMP — Scanners
+
+Scanner credentials are Fernet-encrypted at rest. All endpoints scoped to `/clients/{id}/`.
+
+```
+GET    /clients/{id}/scanners
+POST   /clients/{id}/scanners
+PATCH  /clients/{id}/scanners/{scanner_id}
+DELETE /clients/{id}/scanners/{scanner_id}
+POST   /clients/{id}/scanners/{scanner_id}/poll
+GET    /clients/{id}/scan-findings
+GET    /clients/{id}/scan-findings/summary
+```
+
+Supported scanners: **Tenable.io**, **Tenable.sc**, **Rapid7 InsightVM**, **Qualys VMDR**, **CrowdStrike Spotlight**
+
+### FedRAMP — SIEMs
+
+Same endpoint pattern as scanners at `/clients/{id}/siems/...`
+
+Supported SIEMs: **Splunk**, **Microsoft Sentinel**, **IBM QRadar**, **Elastic Security**
+
+### FedRAMP — KSI Validation
+
+Seven Key Security Indicators validated automatically every 6 hours.
+
+```
+GET   /clients/{id}/ksi              Current results + pass/fail per KSI
+POST  /clients/{id}/ksi/validate     Trigger immediate validation
+GET   /ksi/summary                   All-client KSI summary (admin)
+```
+
+| KSI | Category | Pass Condition |
 |-----|----------|----------------|
-| KSI-1 | Vulnerability Management | No CRITICAL/HIGH CVEs open > 15/30 days |
-| KSI-2 | Patch Currency | ≥90% patch rate |
-| KSI-3 | Continuous Monitoring | All scanners polled within interval + 2h |
-| KSI-4 | Incident Detection | ≥1 active SIEM with recent data |
+| KSI-1 | Vulnerability Management | No CRITICAL open > 15 days, HIGH > 30 days |
+| KSI-2 | Patch Currency | ≥ 90% patch rate |
+| KSI-3 | Continuous Monitoring | All scanners polled within interval + 2 h |
+| KSI-4 | Incident Detection | ≥ 1 active SIEM with recent data |
 | KSI-5 | POA&M Timeliness | 0 overdue CRITICAL remediations |
-| KSI-6 | Supply Chain | ≥80% vendors assessed within 30 days |
+| KSI-6 | Supply Chain | ≥ 80% vendors assessed within 30 days |
 | KSI-7 | Dark Web Exposure | No unacknowledged alerts > 48 hours |
 
-KSI API: `GET /api/v1/clients/{id}/ksi`, `POST /api/v1/clients/{id}/ksi/validate`
+### FedRAMP — OSCAL Output
 
-### Section 6 — Audit Log
+```
+GET  /clients/{id}/oscal/poam.xml
+GET  /clients/{id}/oscal/sar.xml
+GET  /clients/{id}/oscal/vdr.json
+GET  /clients/{id}/oscal/oar.json
+GET  /clients/{id}/oscal/ssp.xml
+GET  /clients/{id}/oscal/bundle.zip     All five documents
+```
 
-Every API call is logged to the `audit_log` table (event type, user, client, method, path, status, IP, duration). Export as CSV:
+### FedRAMP — Audit Log
 
-- `GET /api/v1/audit` — global audit log (admin)
-- `GET /api/v1/clients/{id}/audit` — per-client audit log
-- `GET /api/v1/clients/{id}/audit.csv` — CSV export
+Every API call is logged: event type, user, client, method, path, status code, IP, duration ms, `X-Request-ID`.
+
+```
+GET  /audit                          Global audit log (admin)
+GET  /clients/{id}/audit             Per-client log
+GET  /clients/{id}/audit.csv         CSV export
+```
+
+### CMMC 2.0
+
+```
+GET    /clients/{id}/cmmc/assessment
+PATCH  /clients/{id}/cmmc/practices/{practice_id}
+POST   /clients/{id}/cmmc/bulk-update
+GET    /cmmc/practices?domain=Access+Control
+```
+
+### Upload & Export
+
+```
+POST /upload/scan                     Auto-detect and preview scan file
+POST /upload/scan/{id}/confirm        Confirm import
+POST /upload/assets                   Preview asset CSV/XLSX
+POST /upload/assets/{id}/confirm      Confirm
+POST /upload/iocs                     Import IOC list (enrichment in background)
+POST /upload/stix                     Import STIX 2.1 bundle
+POST /upload/clients                  Bulk client preview
+POST /upload/clients/{id}/confirm     Confirm
+GET  /upload/history                  Upload log
+GET  /upload/templates/{type}         Download CSV template (assets | clients | iocs)
+
+GET  /export/items.csv
+GET  /export/items.json
+GET  /export/iocs.txt?days=7
+GET  /export/iocs.csv?days=7
+GET  /export/iocs.stix?days=7
+GET  /clients/{id}/export/remediation.csv
+GET  /clients/{id}/export/remediation.xlsx
+GET  /clients/{id}/export/detection-rules.zip   SPL + KQL + Sigma
+POST /clients/{id}/export/push-rules-github
+GET  /clients/{id}/report.html?days=30
+GET  /clients/{id}/report/pdf
+```
+
+**Supported upload formats:** Nessus (`.nessus`), Qualys XML/CSV, OpenVAS XML, Rapid7/InsightVM CSV, generic CSV/XLSX (fuzzy mapping), IOC plain-text/JSON, STIX 2.1 bundle, bulk clients CSV.
+
+### Executive Briefing Deck
+
+```
+GET  /clients/{id}/deck.pptx?days=30
+GET  /clients/{id}/deck-preview
+```
+
+12-slide PowerPoint with AI-written summaries, matplotlib charts, and remediation donut. Requires `python-pptx matplotlib Pillow` (included in `requirements.txt`).
+
+### Tabletop Exercise Generator
+
+```
+GET   /clients/{id}/tabletops
+POST  /clients/{id}/tabletops/generate    {scenario_type, custom_prompt}
+GET   /clients/{id}/tabletops/{id}/export.pdf
+GET   /clients/{id}/tabletops/{id}/export.pptx
+GET   /tabletop/scenario-types
+```
+
+Scenarios: `ransomware` · `supply_chain` · `data_breach` · `insider_threat` · `ddos` · `phishing` · `zero_day` · `cloud_breach`
+
+### Ollama Proxy
+
+```
+GET|POST  /api/ollama/{path}    Proxies to http://localhost:11434/{path}
+```
+
+Streams responses token-by-token. Rate-limited to 30 req/min per user. Eliminates browser CORS issues between the dashboard and Ollama.
+
+### Admin
+
+```
+GET    /api/v1/admin/users
+POST   /api/v1/admin/users
+DELETE /api/v1/admin/users/{id}
+POST   /api/v1/admin/users/{id}/force-logout
+
+GET    /api/v1/admin/clients
+POST   /api/v1/admin/clients
+PATCH  /api/v1/admin/clients/{id}
+DELETE /api/v1/admin/clients/{id}
+GET    /api/v1/admin/clients/{id}/assets
+POST   /api/v1/admin/clients/{id}/assets/import
+DELETE /api/v1/admin/clients/{id}/assets/{asset_id}
+```
 
 ---
 
-## Contributing
+## Environment Variables
 
-PRs and issues are welcome. If you add a new feed source, fix a parser, or improve the dashboard — open a pull request. If a feed is broken or returning bad data, open an issue with the feed ID and a sample of what you're seeing.
+Copy `.env.example` to `.env`. Generate strong values with `python scripts/generate-secrets.py`.
+
+### Required for production
+
+| Variable | Description |
+|----------|-------------|
+| `SECRET_KEY` | JWT signing secret — minimum 32 random bytes |
+| `ADMIN_PASSWORD` | Admin account password — must satisfy complexity rules |
+| `PHANTOMFEED_ENCRYPTION_KEY` | Fernet key for scanner/SIEM credential encryption. **Required when `HOST` is not localhost.** Generate: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
+
+### Server
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HOST` | `127.0.0.1` | Bind address |
+| `PORT` | `8000` | Port |
+| `DB_PATH` | `./threatpulse.db` | SQLite file path |
+| `RETENTION_DAYS` | `90` | Days of history before purge |
+| `CORS_ORIGINS` | `http://localhost:8000` | Comma-separated allowed origins |
+
+### Feed API keys (all optional — improve rate limits or unlock feeds)
+
+| Variable | Source | Effect |
+|----------|--------|--------|
+| `NVD_API_KEY` | [nvd.nist.gov](https://nvd.nist.gov/developers/request-an-api-key) | Raises NVD rate limit from 5 to 50 req/30s |
+| `OTX_API_KEY` | [otx.alienvault.com](https://otx.alienvault.com) | Required for OTX threat pulses |
+| `URLHAUS_API_KEY` | [auth.abuse.ch](https://auth.abuse.ch/) | Increased URLhaus access |
+| `POLL_INTERVAL_FAST` | `15` | High-priority feed interval (minutes) |
+| `POLL_INTERVAL_SLOW` | `60` | Vendor/intel feed interval (minutes) |
+| `NVD_PAGE_SIZE` | `200` | CVEs per NVD API page (max 2000) |
+
+### IOC enrichment keys (all optional)
+
+| Variable | Source | Enriches |
+|----------|--------|---------|
+| `ABUSEIPDB_API_KEY` | [abuseipdb.com](https://www.abuseipdb.com) | IP reputation + country |
+| `GREYNOISE_API_KEY` | [greynoise.io](https://www.greynoise.io) | IP classification |
+| `VIRUSTOTAL_API_KEY` | [virustotal.com](https://www.virustotal.com) | Hash/domain/URL detection ratio |
+
+### MISP
+
+```env
+MISP_URL=https://your-misp-instance
+MISP_API_KEY=your_api_key
+MISP_VERIFY_SSL=true
+```
+
+### TAXII
+
+```env
+TAXII_USERNAME=
+TAXII_PASSWORD=
+TAXII_CERT_PATH=       # PEM path for CISA AIS mutual TLS
+```
+
+---
+
+## Architecture
+
+```
+threatpulse/
+├── main.py                 # FastAPI app, lifespan, middleware, Ollama proxy
+├── config.py               # Feed URLs, API keys, settings
+├── .env                    # Secrets — never commit
+├── .env.example            # Template
+├── requirements.txt
+│
+├── db/
+│   ├── database.py         # Async SQLite: connect, CRUD, sessions, token denylist
+│   └── audit_log.py        # Audit log table, CSV export, request correlation
+│
+├── auth/
+│   └── auth.py             # JWT issue/verify, token_version, admin seed
+│
+├── ingest/
+│   ├── base.py             # BaseFetcher: HTTP helpers, retries, normalization
+│   ├── nvd.py              # NVD CVE API v2
+│   ├── cisa.py             # CISA KEV + CSAF advisories
+│   ├── rss_feeds.py        # Vendor RSS ingestion
+│   ├── threat_intel.py     # abuse.ch, OTX, supply chain
+│   └── scheduler.py        # APScheduler: per-feed intervals
+│
+├── api/
+│   ├── routes.py           # Core feed endpoints
+│   ├── auth_routes.py      # /auth/login, /auth/logout, /auth/me
+│   ├── admin_routes.py     # Users, clients, assets, webhooks
+│   ├── audit_middleware.py # AuditMiddleware: logs every request, injects X-Request-ID
+│   ├── rate_limit.py       # In-memory sliding window rate limiter
+│   ├── analytics_routes.py
+│   ├── ioc_routes.py
+│   ├── upload_routes.py
+│   ├── export_routes.py
+│   ├── scanner_routes.py
+│   ├── siem_routes.py
+│   ├── ksi_routes.py
+│   ├── oscal_routes.py
+│   ├── audit_routes.py
+│   └── ...                 # actor, darkweb, misp, deck, cmmc, tabletop, supply chain
+│
+├── threat_actors/
+│   └── seed_data.py        # 55+ actor dossiers, seeded at startup
+│
+├── scripts/
+│   └── generate-secrets.py # Generate SECRET_KEY, ADMIN_PASSWORD, ENCRYPTION_KEY
+│
+├── deploy/
+│   └── threatpulse.service # systemd unit with kernel hardening
+│
+├── nginx/
+│   ├── nginx.conf          # HTTPS, HSTS, rate limiting, /health exempt
+│   └── certs/              # TLS cert + key (not committed)
+│
+├── Dockerfile
+├── docker-compose.yml
+│
+└── tests/
+    ├── test_api_integration.py   # HTTP integration tests via TestClient
+    └── test_fedramp.py           # Unit tests: security invariants, audit, sessions
+```
+
+### Security model
+
+- **JWT** with `jti` denylist (server-side revocation) and per-user `token_version` (force-logout all sessions)
+- **Session cap** — max 5 concurrent sessions per user; enforced at login
+- **Fernet encryption** for scanner/SIEM credentials at rest
+- **SSRF protection** — webhook delivery blocks RFC-1918/loopback; scanner endpoints explicitly allow internal ranges for legitimate enterprise networks
+- **Content-Security-Policy**, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, HSTS (HTTPS only)
+- **Rate limiting** — 60 req/min per IP on all routes; 30 req/min per user on Ollama proxy
+- **JSON body size limit** — 1 MB cap on `application/json` requests
+- **Request correlation** — every response carries `X-Request-ID` (generated or echoed from client), stored in audit log
+
+### Running tests
+
+```bash
+python -m pytest tests/ -v
+```
+
+Uses an in-memory SQLite database. Scheduler, initial poll, and threat-actor seeding are patched out. All 75 tests should pass.
+
+---
+
+## Adding a New Feed
+
+1. Create a class in `ingest/` inheriting `BaseFetcher`
+2. Set `feed_id`, `feed_label`, `category`, and `poll_interval`
+3. Implement `async def fetch(self) -> list[dict]`
+4. Register it in `ingest/scheduler.py` → `_build_fetchers()`
+
+For simple RSS sources, add an entry to `VENDOR_RSS_FEEDS` in `config.py` — no code needed.
 
 ---
 
