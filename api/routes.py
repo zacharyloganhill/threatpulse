@@ -114,6 +114,22 @@ async def list_feeds(_: dict = Depends(get_current_user)):
     return {"feeds": feed_ids}
 
 
+@router.get("/feeds/status", summary="Per-feed health: last run, last error, item count")
+async def feed_status(_: dict = Depends(get_current_user)):
+    """
+    Returns in-memory health state for every registered feed.
+    Status: 'ok' | 'error' | 'never'. Resets on server restart.
+    """
+    feeds = scheduler.get_feed_health()
+    error_count = sum(1 for f in feeds if f["status"] == "error")
+    never_count = sum(1 for f in feeds if f["status"] == "never")
+    ok_count = sum(1 for f in feeds if f["status"] == "ok")
+    return {
+        "feeds": feeds,
+        "summary": {"ok": ok_count, "error": error_count, "never": never_count, "total": len(feeds)},
+    }
+
+
 @router.post("/refresh", summary="Trigger an immediate poll of all feeds")
 async def refresh_all(background_tasks: BackgroundTasks, admin: dict = Depends(require_admin)):
     """Fires all fetchers in the background. Returns immediately."""

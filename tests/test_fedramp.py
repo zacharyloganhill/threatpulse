@@ -942,3 +942,96 @@ async def test_revoke_all_user_sessions():
 
     await revoke_all_user_sessions(user_id)
     assert await count_active_sessions(user_id) == 0
+
+
+# ── Feed health tracking tests ────────────────────────────────────────────────
+
+def test_feed_health_initial_state():
+    """Fresh fetcher reports 'never' status with no run data."""
+    from ingest.nvd import NVDFetcher
+    f = NVDFetcher()
+    h = f.get_health()
+    assert h["status"] == "never"
+    assert h["last_run_at"] is None
+    assert h["last_success_at"] is None
+    assert h["last_error"] is None
+    assert h["consecutive_failures"] == 0
+    assert h["feed_id"] == f.feed_id
+    assert h["poll_interval_minutes"] == f.poll_interval
+
+
+@pytest.mark.asyncio
+async def test_feed_health_records_success():
+    """After a successful run, health shows 'ok' and populated timestamps."""
+    from unittest.mock import AsyncMock, patch
+    from ingest.nvd import NVDFetcher
+
+    fetcher = NVDFetcher()
+    fake_item = {
+        "id": "test-nvd-001",
+        "feed_id": "nvd",
+        "feed_label": "NVD CVEs",
+        "title": "Test CVE",
+        "description": "Test",
+        "severity": "HIGH",
+        "category": "cve",
+        "published_at": "2025-01-01",
+        "fetched_at": "2025-01-01",
+        "is_new": 1,
+    }
+
+    with (
+        patch.object(fetcher, "fetch", new=AsyncMock(return_value=[fake_item])),
+        patch("db.database.upsert_item", new=AsyncMock(return_value=True)),
+        patch("db.database.get_all_assets_for_matching", new=AsyncMock(return_value=[])),
+        patch("ingest.risk_score.score_item", new=AsyncMock(return_value=0)),
+        patch("reports.webhook_dispatcher.get_dispatcher"),
+    ):
+        from db import database as db
+        await db.connect()
+        count = await fetcher.run()
+
+    h = fetcher.get_health()
+    assert h["status"] == "ok"
+    assert h["last_run_at"] is not None
+    assert h["last_success_at"] is not None
+    assert h["last_error"] is None
+    assert h["consecutive_failures"] == 0
+
+
+@pytest.mark.asyncio
+async def test_feed_health_records_failure():
+    """When fetch() raises, health shows 'error' and increments consecutive_failures."""
+    from unittest.mock import AsyncMock, patch
+    from ingest.nvd import NVDFetcher
+
+    fetcher = NVDFetcher()
+    with patch.object(fetcher, "fetch", new=AsyncMock(side_effect=RuntimeError("DNS failure"))):
+        from db import database as db
+        await db.connect()
+        count = await fetcher.run()
+
+    assert count == 0
+    h = fetcher.get_health()
+    assert h["status"] == "error"
+    assert h["consecutive_failures"] == 1
+    assert "DNS failure" in (h["last_error"] or "")
+
+
+def test_scheduler_get_feed_health_returns_list():
+    """get_feed_health returns a list after the scheduler is built."""
+    from unittest.mock import patch
+    from ingest import scheduler
+
+    with patch("ingest.scheduler.AsyncIOScheduler"):
+        scheduler.start_scheduler()
+
+    health = scheduler.get_feed_health()
+    assert isinstance(health, list)
+    assert len(health) > 0
+    for entry in health:
+        assert "feed_id" in entry
+        assert "status" in entry
+        assert entry["status"] in ("ok", "error", "never")
+
+    scheduler.stop_scheduler()

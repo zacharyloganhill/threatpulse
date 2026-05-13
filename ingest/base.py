@@ -32,6 +32,34 @@ class BaseFetcher(ABC):
             timeout=30.0,
             follow_redirects=True,
         )
+        # In-memory health tracking — reset on restart
+        self._last_run_at: Optional[str] = None
+        self._last_success_at: Optional[str] = None
+        self._last_error: Optional[str] = None
+        self._last_item_count: int = 0
+        self._consecutive_failures: int = 0
+
+    def get_health(self) -> dict:
+        if self._last_run_at is None:
+            status = "never"
+        elif self._last_error and self._last_run_at == self._last_success_at:
+            status = "error"
+        elif self._consecutive_failures > 0:
+            status = "error"
+        else:
+            status = "ok"
+        return {
+            "feed_id": self.feed_id,
+            "label": self.feed_label,
+            "category": self.category,
+            "poll_interval_minutes": self.poll_interval,
+            "status": status,
+            "last_run_at": self._last_run_at,
+            "last_success_at": self._last_success_at,
+            "last_item_count": self._last_item_count,
+            "last_error": self._last_error,
+            "consecutive_failures": self._consecutive_failures,
+        }
 
     async def close(self):
         await self.client.aclose()
@@ -87,9 +115,12 @@ class BaseFetcher(ABC):
 
         console.print(f"[cyan]↓ Polling [{self.feed_label}]...[/]")
         start = datetime.now(timezone.utc).replace(tzinfo=None)
+        self._last_run_at = start.isoformat()
         try:
             items = await self.fetch()
         except Exception as e:
+            self._last_error = str(e)[:500]
+            self._consecutive_failures += 1
             console.print(f"[red][{self.feed_id}] fetch() raised: {e}[/]")
             return 0
 
@@ -155,6 +186,10 @@ class BaseFetcher(ABC):
                         pass
 
         elapsed = (datetime.now(timezone.utc).replace(tzinfo=None) - start).total_seconds()
+        self._last_success_at = self._last_run_at
+        self._last_item_count = new_count
+        self._last_error = None
+        self._consecutive_failures = 0
         console.print(
             f"[green]✓ [{self.feed_label}][/] {len(items)} fetched, "
             f"[bold]{new_count} new[/] ({elapsed:.1f}s)"

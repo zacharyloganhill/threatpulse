@@ -236,6 +236,7 @@ All requests require `Authorization: Bearer <token>` unless noted.
 ### Threat Feed
 
 ```
+GET    /feeds/status               Per-feed health: last run, last error, item count, status (ok/error/never)
 GET    /items                      List items — filterable, searchable, paginated
 GET    /items/{id}                 Single item by ID
 POST   /items/{id}/read            Mark item read (per-user — does not affect other users)

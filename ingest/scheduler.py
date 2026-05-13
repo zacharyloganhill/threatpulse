@@ -107,6 +107,11 @@ def get_feed_ids() -> list[str]:
     return list(_fetchers.keys())
 
 
+def get_feed_health() -> list[dict]:
+    """Return in-memory health state for every registered feed."""
+    return [f.get_health() for f in _fetchers.values()]
+
+
 def start_scheduler():
     global scheduler, _fetchers
     _fetchers = _build_fetchers()
